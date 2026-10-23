@@ -66,6 +66,9 @@ struct RootWindow: View {
                 onCancel: { model.pendingConflict = nil }
             )
         }
+        .sheet(isPresented: $model.showAssociationSheet) {
+            AssociationSheet()
+        }
     }
 
     /// 未打开文件时只显示 "AZip"，打开后显示 "AZip - 文件名"。

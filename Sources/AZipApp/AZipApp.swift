@@ -20,5 +20,9 @@ struct AZipApp: App {
                 .keyboardShortcut("o")
             }
         }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
