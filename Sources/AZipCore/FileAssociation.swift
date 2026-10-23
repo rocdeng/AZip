@@ -21,21 +21,31 @@ public enum FileAssociationService {
     }
 
     public static func isDefault(bundleID: String) -> Bool {
-        diskImageUTIs.contains { currentHandler(for: $0) == bundleID }
+        // 只有具体 UTI 能代表 .dmg 的双击行为；父类型可能仍指向本应用却无实际效果。
+        guard let primaryUTI = diskImageUTIs.first else { return false }
+        return currentHandler(for: primaryUTI) == bundleID
     }
 
     public static func setDefault(bundleID: String) throws {
-        for uti in diskImageUTIs {
-            let status = LSSetDefaultRoleHandlerForContentType(
+        guard let primaryUTI = diskImageUTIs.first else { return }
+        let status = LSSetDefaultRoleHandlerForContentType(
+            primaryUTI as CFString, .all, bundleID as CFString
+        )
+        if status != noErr {
+            throw FileAssociationError.setFailed(uti: primaryUTI, status: status)
+        }
+        // 父类型仅作兜底：LaunchServices 可能不支持该 UTI 或返回 noErr 却不生效，
+        // 因此其失败不影响整体结果，具体 UTI 才是判定依据。
+        for uti in diskImageUTIs.dropFirst() {
+            _ = LSSetDefaultRoleHandlerForContentType(
                 uti as CFString, .all, bundleID as CFString
             )
-            if status != noErr {
-                throw FileAssociationError.setFailed(uti: uti, status: status)
-            }
         }
     }
 
     public static func restoreSystemDefault() throws {
+        // LSCopyAllRoleHandlersForContentType("public.disk-image") 并不列出
+        // DiskImageMounter，因此父类型的恢复不可靠；只要求具体 UTI 恢复成功。
         try setDefault(bundleID: systemDiskImageHandler)
     }
 }
