@@ -94,11 +94,16 @@ final class DMGSessionModel: ObservableObject {
         state = .mounting
 
         // 串行化打开流程：等上一个 open 完成清理后再开始，避免两个卷同时挂载。
+        //
+        // 这里刻意不 cancel 上一个 open：ProcessRunner 只在超时时终止子进程，没有取消处理，
+        // 取消只会从内部的 Task.sleep 抛出 CancellationError，让 attach 在上抛错的同时
+        // 继续由 hdiutil 完成挂载——`performOpen` 的 catch 拿不到 MountResult，卷就永久悬挂。
+        // 因此改为纯串行等待；被取代的 open 由 `performOpen` 开头的令牌检查直接返回，
+        // 若它恰好已经挂载完成，则在同一处令牌检查里退出自己挂的卷。
         let previous = openTask
-        previous?.cancel()
         openTask = Task { [weak self] in
-            await previous?.value
-            guard let self, token == self.sessionToken else { return }
+            _ = await previous?.value
+            guard let self else { return }
             await self.performOpen(dmgURL, token: token)
         }
     }
@@ -151,7 +156,9 @@ final class DMGSessionModel: ObservableObject {
     func enter(_ entry: VolumeEntry) {
         switch entry.kind {
         case .folder:
-            Task { await performEnter(entry.url) }
+            // 同步捕获令牌：任务可能在新的 open 之后才启动，不能在任务内部再读。
+            let token = sessionToken
+            Task { await performEnter(entry.url, token: token) }
         case .application:
             requestInstall(entry)
         case .file, .symbolicLink:
@@ -159,8 +166,7 @@ final class DMGSessionModel: ObservableObject {
         }
     }
 
-    private func performEnter(_ url: URL) async {
-        let token = sessionToken
+    private func performEnter(_ url: URL, token: UUID) async {
         guard token == sessionToken else { return }
         do {
             let entries = try VolumeScanner.scan(directory: url)
@@ -242,7 +248,10 @@ final class DMGSessionModel: ObservableObject {
                     progress: { [weak self] value in
                         Task { @MainActor in
                             guard let self, token == self.sessionToken else { return }
-                            self.state = .installing(app: appURL, progress: value)
+                            // 迟到的回调不能把已完成的安装重新拉回 .installing。
+                            if case .installing = self.state {
+                                self.state = .installing(app: appURL, progress: value)
+                            }
                         }
                     }
                 )
@@ -276,8 +285,12 @@ final class DMGSessionModel: ObservableObject {
     func closeSession() async {
         // 让仍在进行的 open / install 续体失效，避免它们在关闭后继续写状态。
         sessionToken = UUID()
-        openTask?.cancel()
-        openTask = nil
+        // 本次关闭操作的令牌：detach 期间若用户又开了新会话，旧会话的错误不能写进新会话。
+        let token = sessionToken
+
+        // 不能取消 openTask：ProcessRunner 没有取消处理，取消只会让 attach 在 hdiutil
+        // 继续运行时抛错，卷挂上了却没有 MountResult 可以回收。这里等它自然结束后再收尾。
+        let inFlight = openTask
 
         let mountedVolume = mount
         mount = nil
@@ -289,11 +302,21 @@ final class DMGSessionModel: ObservableObject {
         banner = nil
         pendingApps = nil
         pendingConflict = nil
+        showAssociationSheet = false
+        pendingWindowSize = nil
+
+        // 等 in-flight attach 落定，保证不会有卷在会话结束后才挂上。
+        _ = await inFlight?.value
+        // 等待期间若已开启新会话，它的 openTask 不能被这里清掉。
+        if sessionToken == token {
+            openTask = nil
+        }
 
         guard let mountedVolume else { return }
         do {
             try await DiskImageMounter.detach(mountedVolume)
         } catch {
+            guard token == sessionToken else { return }
             banner = BannerMessage(text: "无法推出磁盘映像：\(describe(error))", isError: true)
         }
     }
