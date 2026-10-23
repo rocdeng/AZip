@@ -11,6 +11,7 @@ struct RootWindow: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .background(
             WindowConfigurator(
+                title: windowTitle,
                 onWindowReady: { window in
                     model.applyPendingWindowSize(to: window)
                 },
@@ -35,6 +36,17 @@ struct RootWindow: View {
                     .padding(.top, 52)
                     .onTapGesture { model.banner = nil }
             }
+        }
+    }
+
+    /// 未打开文件时只显示 "AZip"，打开后显示 "AZip - 文件名"。
+    private var windowTitle: String {
+        switch model.state {
+        case .idle, .failed:
+            return "AZip"
+        default:
+            let name = model.dmgName
+            return name.isEmpty || name == "AZip" ? "AZip" : "AZip - \(name)"
         }
     }
 
