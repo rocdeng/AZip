@@ -21,23 +21,37 @@ final class AppInstallerTests: XCTestCase {
 
     func testInstallsApp() async throws {
         let installed = try await AppInstaller.install(
-            InstallRequest(sourceApp: source, targetDirectory: targetDirectory, overwrite: false)
+            InstallRequest(
+                sourceApp: source,
+                targetDirectory: targetDirectory,
+                overwrite: false,
+                registerHandler: { _ in }
+            )
         )
 
         XCTAssertEqual(installed.lastPathComponent, "Fake.app")
         XCTAssertTrue(FileManager.default.fileExists(atPath: installed.path))
-        let marker = try String(contentsOf: installed.appendingPathComponent("Contents/MacOS/marker"), encoding: .utf8)
-        XCTAssertEqual(marker, "v1")
+        XCTAssertEqual(try marker(of: installed), "v1")
     }
 
     func testThrowsConflictWhenTargetExistsWithoutOverwrite() async throws {
         _ = try await AppInstaller.install(
-            InstallRequest(sourceApp: source, targetDirectory: targetDirectory, overwrite: false)
+            InstallRequest(
+                sourceApp: source,
+                targetDirectory: targetDirectory,
+                overwrite: false,
+                registerHandler: { _ in }
+            )
         )
 
         do {
             _ = try await AppInstaller.install(
-                InstallRequest(sourceApp: source, targetDirectory: targetDirectory, overwrite: false)
+                InstallRequest(
+                    sourceApp: source,
+                    targetDirectory: targetDirectory,
+                    overwrite: false,
+                    registerHandler: { _ in }
+                )
             )
             XCTFail("应当抛出冲突")
         } catch let error as InstallError {
@@ -49,7 +63,12 @@ final class AppInstallerTests: XCTestCase {
 
     func testOverwriteReplacesAppAndTrashesOldVersion() async throws {
         _ = try await AppInstaller.install(
-            InstallRequest(sourceApp: source, targetDirectory: targetDirectory, overwrite: false)
+            InstallRequest(
+                sourceApp: source,
+                targetDirectory: targetDirectory,
+                overwrite: false,
+                registerHandler: { _ in }
+            )
         )
 
         try makeFakeApp(at: source, marker: "v2")
@@ -60,14 +79,90 @@ final class AppInstallerTests: XCTestCase {
                 sourceApp: source,
                 targetDirectory: targetDirectory,
                 overwrite: true,
-                trashHandler: { url in trashed.record(url) }
+                trashHandler: { url in trashed.record(url) },
+                registerHandler: { _ in }
             )
         )
 
-        let marker = try String(contentsOf: installed.appendingPathComponent("Contents/MacOS/marker"), encoding: .utf8)
-        XCTAssertEqual(marker, "v2")
+        XCTAssertEqual(try marker(of: installed), "v2")
         XCTAssertEqual(trashed.urls.count, 1)
         XCTAssertFalse(FileManager.default.fileExists(atPath: trashed.urls[0].path))
+    }
+
+    // MARK: - commitStaged
+
+    func testCommitStagedMovesStagedAppWhenTargetAbsent() throws {
+        let staged = root.appendingPathComponent("Staging/Fake.app")
+        try makeFakeApp(at: staged, marker: "staged")
+        let finalURL = targetDirectory.appendingPathComponent("Fake.app")
+        let trash = TrashSpy()
+
+        let installed = try AppInstaller.commitStaged(
+            stagingApp: staged,
+            finalURL: finalURL,
+            targetDirectory: targetDirectory,
+            overwrite: false,
+            trashHandler: { trash.record($0) }
+        )
+
+        XCTAssertEqual(installed.lastPathComponent, "Fake.app")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: installed.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staged.path))
+        XCTAssertEqual(try marker(of: installed), "staged")
+        XCTAssertTrue(trash.urls.isEmpty)
+    }
+
+    func testCommitStagedWithoutOverwriteLeavesConcurrentTargetUntouched() throws {
+        let staged = root.appendingPathComponent("Staging/Fake.app")
+        try makeFakeApp(at: staged, marker: "new")
+        // 模拟 ditto 期间被其他进程创建的目标应用。
+        let finalURL = targetDirectory.appendingPathComponent("Fake.app")
+        try makeFakeApp(at: finalURL, marker: "concurrent")
+        let trash = TrashSpy()
+
+        XCTAssertThrowsError(
+            try AppInstaller.commitStaged(
+                stagingApp: staged,
+                finalURL: finalURL,
+                targetDirectory: targetDirectory,
+                overwrite: false,
+                trashHandler: { trash.record($0) }
+            )
+        ) { error in
+            guard let installError = error as? InstallError,
+                  case .conflict(let conflictURL) = installError else {
+                return XCTFail("错误类型不符：\(error)")
+            }
+            XCTAssertEqual(conflictURL.path, finalURL.path)
+        }
+
+        XCTAssertEqual(try marker(of: finalURL), "concurrent")
+        XCTAssertTrue(trash.urls.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: staged.path))
+    }
+
+    func testCommitStagedWithOverwriteTrashesOldAppAndInstallsNew() throws {
+        let staged = root.appendingPathComponent("Staging/Fake.app")
+        try makeFakeApp(at: staged, marker: "new")
+        let finalURL = targetDirectory.appendingPathComponent("Fake.app")
+        try makeFakeApp(at: finalURL, marker: "old")
+        let trash = TrashSpy()
+
+        let installed = try AppInstaller.commitStaged(
+            stagingApp: staged,
+            finalURL: finalURL,
+            targetDirectory: targetDirectory,
+            overwrite: true,
+            trashHandler: { trash.record($0) }
+        )
+
+        XCTAssertEqual(try marker(of: installed), "new")
+        XCTAssertEqual(trash.urls.count, 1)
+        XCTAssertTrue(trash.urls[0].lastPathComponent.hasPrefix(AppInstaller.backupPrefix))
+        XCTAssertEqual(
+            trash.urls[0].deletingLastPathComponent().resolvingSymlinksInPath().path,
+            targetDirectory.resolvingSymlinksInPath().path
+        )
     }
 
     func testRejectsNonWritableTarget() async throws {
@@ -80,7 +175,12 @@ final class AppInstallerTests: XCTestCase {
 
         do {
             _ = try await AppInstaller.install(
-                InstallRequest(sourceApp: source, targetDirectory: readOnly, overwrite: false)
+                InstallRequest(
+                    sourceApp: source,
+                    targetDirectory: readOnly,
+                    overwrite: false,
+                    registerHandler: { _ in }
+                )
             )
             XCTFail("应当抛出权限错误")
         } catch let error as InstallError {
@@ -96,7 +196,12 @@ final class AppInstallerTests: XCTestCase {
 
         do {
             _ = try await AppInstaller.install(
-                InstallRequest(sourceApp: folder, targetDirectory: targetDirectory, overwrite: false)
+                InstallRequest(
+                    sourceApp: folder,
+                    targetDirectory: targetDirectory,
+                    overwrite: false,
+                    registerHandler: { _ in }
+                )
             )
             XCTFail("应当抛出无效源错误")
         } catch let error as InstallError {
@@ -108,7 +213,12 @@ final class AppInstallerTests: XCTestCase {
 
     func testLeavesNoStagingResidue() async throws {
         _ = try await AppInstaller.install(
-            InstallRequest(sourceApp: source, targetDirectory: targetDirectory, overwrite: false)
+            InstallRequest(
+                sourceApp: source,
+                targetDirectory: targetDirectory,
+                overwrite: false,
+                registerHandler: { _ in }
+            )
         )
 
         let leftovers = try FileManager.default
@@ -131,6 +241,10 @@ final class AppInstallerTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func marker(of app: URL) throws -> String {
+        try String(contentsOf: app.appendingPathComponent("Contents/MacOS/marker"), encoding: .utf8)
+    }
 
     private func makeFakeApp(at url: URL, marker: String) throws {
         try? FileManager.default.removeItem(at: url)

@@ -5,17 +5,20 @@ public struct InstallRequest: Sendable {
     public let targetDirectory: URL
     public let overwrite: Bool
     public let trashHandler: @Sendable (URL) -> Bool
+    public let registerHandler: @Sendable (URL) async -> Void
 
     public init(
         sourceApp: URL,
         targetDirectory: URL,
         overwrite: Bool,
-        trashHandler: @escaping @Sendable (URL) -> Bool = AppInstaller.moveToTrash
+        trashHandler: @escaping @Sendable (URL) -> Bool = AppInstaller.moveToTrash,
+        registerHandler: @escaping @Sendable (URL) async -> Void = AppInstaller.defaultRegister
     ) {
         self.sourceApp = sourceApp
         self.targetDirectory = targetDirectory
         self.overwrite = overwrite
         self.trashHandler = trashHandler
+        self.registerHandler = registerHandler
     }
 }
 
@@ -70,49 +73,93 @@ public enum AppInstaller {
                     try? await Task.sleep(for: .milliseconds(200))
                 }
             }
-            defer { progressTask.cancel() }
 
-            let copy = try await ProcessRunner.run(
-                "/usr/bin/ditto",
-                ["--rsrc", "--extattr", "--acl", source.path, stagingApp.path],
-                timeoutSeconds: 900
-            )
+            let copy: ProcessRunner.Result
+            do {
+                copy = try await ProcessRunner.run(
+                    "/usr/bin/ditto",
+                    ["--rsrc", "--extattr", "--acl", source.path, stagingApp.path],
+                    timeoutSeconds: 900
+                )
+            } catch {
+                progressTask.cancel()
+                await progressTask.value
+                throw error
+            }
+            // 先等待轮询任务结束，避免它在进度回调或函数返回后再触发。
             progressTask.cancel()
+            await progressTask.value
+
             guard copy.status == 0 else {
                 throw InstallError.copyFailed(copy.stderr.isEmpty ? "ditto 退出码 \(copy.status)" : copy.stderr)
             }
             progress(1.0)
 
-            var backupURL: URL?
-            if fileManager.fileExists(atPath: finalURL.path) {
-                let backup = targetDirectory
-                    .appendingPathComponent("\(backupPrefix)\(UUID().uuidString).app")
-                try fileManager.moveItem(at: finalURL, to: backup)
-                backupURL = backup
-            }
+            let installed = try commitStaged(
+                stagingApp: stagingApp,
+                finalURL: finalURL,
+                targetDirectory: targetDirectory,
+                overwrite: request.overwrite,
+                trashHandler: request.trashHandler
+            )
 
-            do {
-                try fileManager.moveItem(at: stagingApp, to: finalURL)
-            } catch {
-                if let backupURL {
-                    try? fileManager.moveItem(at: backupURL, to: finalURL)
-                }
-                throw InstallError.moveFailed(error.localizedDescription)
-            }
-
-            _ = QuarantineCleaner.remove(at: finalURL)
-            await LaunchServicesRegistrar.register(finalURL)
-
-            if let backupURL {
-                _ = request.trashHandler(backupURL)
-            }
+            _ = QuarantineCleaner.remove(at: installed)
+            await request.registerHandler(installed)
 
             try? fileManager.removeItem(at: stagingRoot)
-            return finalURL
+            return installed
         } catch {
             try? fileManager.removeItem(at: stagingRoot)
             throw error
         }
+    }
+
+    /// 将已复制完成的暂存应用提交到最终位置。
+    ///
+    /// 提交前会重新检查目标路径是否存在：`ditto` 可能耗时很久，期间目标可能被
+    /// 其他进程或用户创建。此时若未获得覆盖确认，必须抛出冲突并保持现有应用不变。
+    static func commitStaged(
+        stagingApp: URL,
+        finalURL: URL,
+        targetDirectory: URL,
+        overwrite: Bool,
+        trashHandler: @Sendable (URL) -> Bool
+    ) throws -> URL {
+        let fileManager = FileManager.default
+
+        var backupURL: URL?
+        if fileManager.fileExists(atPath: finalURL.path) {
+            guard overwrite else {
+                throw InstallError.conflict(finalURL)
+            }
+            let backup = targetDirectory
+                .appendingPathComponent("\(backupPrefix)\(UUID().uuidString).app")
+            try fileManager.moveItem(at: finalURL, to: backup)
+            backupURL = backup
+        }
+
+        do {
+            try fileManager.moveItem(at: stagingApp, to: finalURL)
+        } catch {
+            if let backupURL {
+                do {
+                    try fileManager.moveItem(at: backupURL, to: finalURL)
+                } catch let restoreError {
+                    // 回滚也失败：保留备份并明确告知其绝对路径，便于用户找回旧版本。
+                    throw InstallError.moveFailed(
+                        "无法安装到 \(finalURL.path)：\(error.localizedDescription)；"
+                            + "且无法从备份 \(backupURL.path) 回滚：\(restoreError.localizedDescription)"
+                    )
+                }
+            }
+            throw InstallError.moveFailed(error.localizedDescription)
+        }
+
+        if let backupURL {
+            _ = trashHandler(backupURL)
+        }
+
+        return finalURL
     }
 
     public static func pendingBackups(in targetDirectory: URL) -> [URL] {
@@ -123,6 +170,10 @@ public enum AppInstaller {
         return contents
             .filter { $0.lastPathComponent.hasPrefix(backupPrefix) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    public static func defaultRegister(_ url: URL) async {
+        await LaunchServicesRegistrar.register(url)
     }
 
     /// 移入废纸篓（可恢复），不使用删除。
