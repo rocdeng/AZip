@@ -5,11 +5,9 @@ struct RootWindow: View {
     @ObservedObject var model: DMGSessionModel
 
     var body: some View {
-        ZStack {
-            VisualEffectBackground()
-
-            content
-        }
+        // 毛玻璃由 `WindowConfigurator` 在 AppKit 层铺满整个窗口；
+        // 这里不再放任何不透明或材质背景，否则会盖住底层的 behindWindow 模糊。
+        content
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .background(
             WindowConfigurator(
