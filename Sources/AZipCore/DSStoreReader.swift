@@ -5,7 +5,7 @@ public struct DSStoreDocument: Sendable {
     public var windowFrame: CGRect?
     public var iconSize: CGFloat?
     public var textSize: CGFloat?
-    /// 背景色分量。真实文件为 RGB 三个分量；简化 fixture 为六个 16 位分量。
+    /// 背景色分量。真实文件为 RGB 三个分量。
     public var backgroundColor: [CGFloat]?
     public var backgroundAlias: Data?
     public var iconPositions: [String: CGPoint] = [:]
@@ -21,13 +21,13 @@ public enum DSStoreReader {
     public static let pointsPerLocationUnit: CGFloat = 1.0
 
     public static func parse(_ data: Data) -> DSStoreDocument {
-        // 真实 Bud1 文件以 `00 00 00 01 "Bud1"` 开头；简化 fixture 直接以 `Bud1` 开头。
+        // 调用方可能传入切片（`dropFirst()`、`data[a..<b]`），此时 `startIndex != 0`，
+        // 下面所有绝对下标都会越界。入口统一复制成从 0 开始的 Data。
+        let data = Data(data)
+        // Bud1 文件以 `00 00 00 01 "Bud1"` 开头。
         if data.count >= 20, readUInt32(data, at: 0) == 1,
            data[4..<8] == Data("Bud1".utf8) {
             return parseBuddyFile(data)
-        }
-        if data.count >= 8, data.prefix(4) == Data("Bud1".utf8) {
-            return parseSimpleFile(data)
         }
         return DSStoreDocument()
     }
@@ -88,16 +88,25 @@ public enum DSStoreReader {
               superStart + 20 <= superEnd else { return document }
 
         let rootNode = Int(readUInt32(data, at: superStart))
+        // 超级块 offset+12 处的 levels 表示树的层数；为 0 表示未知。
+        // 即使文件谎报极深层级，也钳制到常量上限，避免恶意文件造成栈溢出。
+        let levelCount = Int(readUInt32(data, at: superStart + 12))
+        let depthLimit = levelCount > 0 ? min(levelCount, maxTraversalDepth) : maxTraversalDepth
         var visited = Set<Int>()
         traverseBuddyTree(
             data,
             offsets: offsets,
             node: rootNode,
+            depth: 0,
+            depthLimit: depthLimit,
             visited: &visited,
             into: &document
         )
         return document
     }
+
+    /// B-tree 递归深度的兜底上限，防止构造的深层文件耗尽调用栈。
+    private static let maxTraversalDepth = 64
 
     /// 将 offset 数组中的地址解析为块内容区间 `[start, end)`。
     private static func buddyBlockRange(
@@ -121,10 +130,13 @@ public enum DSStoreReader {
         _ data: Data,
         offsets: [UInt32],
         node: Int,
+        depth: Int,
+        depthLimit: Int,
         visited: inout Set<Int>,
         into document: inout DSStoreDocument
     ) {
-        guard visited.insert(node).inserted,
+        guard depth < depthLimit,
+              visited.insert(node).inserted,
               let (start, end) = buddyBlockRange(data, offsets: offsets, index: node),
               start + 8 <= end else { return }
 
@@ -143,6 +155,8 @@ public enum DSStoreReader {
                     data,
                     offsets: offsets,
                     node: child,
+                    depth: depth + 1,
+                    depthLimit: depthLimit,
                     visited: &visited,
                     into: &document
                 )
@@ -156,6 +170,8 @@ public enum DSStoreReader {
                 data,
                 offsets: offsets,
                 node: nextNode,
+                depth: depth + 1,
+                depthLimit: depthLimit,
                 visited: &visited,
                 into: &document
             )
@@ -239,8 +255,8 @@ public enum DSStoreReader {
         switch record.code {
         case "Iloc":
             guard record.value.count >= 8 else { return }
-            let x = CGFloat(readUInt32(record.value, at: 0)) * pointsPerLocationUnit
-            let y = CGFloat(readUInt32(record.value, at: 4)) * pointsPerLocationUnit
+            let x = CGFloat(Int32(bitPattern: readUInt32(record.value, at: 0))) * pointsPerLocationUnit
+            let y = CGFloat(Int32(bitPattern: readUInt32(record.value, at: 4))) * pointsPerLocationUnit
             document.iconPositions[record.name] = CGPoint(x: x, y: y)
 
         case "icvp":
@@ -286,146 +302,7 @@ public enum DSStoreReader {
         (value as? NSNumber)?.doubleValue
     }
 
-    // MARK: - Simple fixture format
-
-    private static func parseSimpleFile(_ data: Data) -> DSStoreDocument {
-        var document = DSStoreDocument()
-        let rootOffset = Int(readUInt32(data, at: 4))
-        guard rootOffset > 0, rootOffset < data.count else { return document }
-
-        var visited = Set<Int>()
-        var queue = [rootOffset]
-
-        while let offset = queue.popLast() {
-            guard offset > 0, offset + 4 <= data.count, visited.insert(offset).inserted else {
-                continue
-            }
-            let next = Int(readUInt32(data, at: offset))
-            if next > 0, next < data.count, !visited.contains(next) {
-                queue.append(next)
-            }
-            parseSimpleBlock(data, at: offset + 4, into: &document)
-        }
-
-        return document
-    }
-
-    private static func parseSimpleBlock(
-        _ data: Data,
-        at start: Int,
-        into document: inout DSStoreDocument
-    ) {
-        var cursor = start
-
-        while cursor + 4 <= data.count {
-            let nameLength = Int(readUInt32(data, at: cursor))
-            cursor += 4
-            if nameLength == 0 { break }
-
-            let nameBytes = nameLength * 2
-            guard cursor + nameBytes + 12 <= data.count else { break }
-            let name = String(
-                data: data[cursor..<cursor + nameBytes],
-                encoding: .utf16BigEndian
-            ) ?? ""
-            cursor += nameBytes
-
-            let code = String(data: data[cursor..<cursor + 4], encoding: .ascii) ?? ""
-            cursor += 4
-            let type = String(data: data[cursor..<cursor + 4], encoding: .ascii) ?? ""
-            cursor += 4
-            let valueLength = Int(readUInt32(data, at: cursor))
-            cursor += 4
-
-            guard valueLength >= 0, cursor + valueLength <= data.count else { break }
-            let value = data[cursor..<cursor + valueLength]
-            cursor += valueLength
-
-            applySimple(code: code, type: type, name: name, value: Data(value), into: &document)
-        }
-    }
-
-    private static func applySimple(
-        code: String,
-        type: String,
-        name: String,
-        value: Data,
-        into document: inout DSStoreDocument
-    ) {
-        switch code {
-        case "Iloc":
-            guard value.count >= 8 else { return }
-            let x = CGFloat(readUInt32(value, at: 0)) * pointsPerLocationUnit
-            let y = CGFloat(readUInt32(value, at: 4)) * pointsPerLocationUnit
-            document.iconPositions[name] = CGPoint(x: x, y: y)
-
-        case "icvp":
-            parseSimpleFields(value) { fieldCode, fieldType, fieldValue in
-                switch fieldCode {
-                case "icon":
-                    document.iconSize = readDouble(fieldValue, type: fieldType)
-                case "text":
-                    document.textSize = readDouble(fieldValue, type: fieldType)
-                case "bkgd":
-                    document.backgroundColor = readColor(fieldValue)
-                case "bgal":
-                    document.backgroundAlias = fieldValue
-                default:
-                    break
-                }
-            }
-
-        case "bwsp":
-            parseSimpleFields(value) { fieldCode, fieldType, fieldValue in
-                guard fieldCode == "wndb" else { return }
-                if let frame = readWindowBounds(fieldValue, type: fieldType) {
-                    document.windowFrame = frame
-                }
-            }
-
-        default:
-            break
-        }
-    }
-
-    /// 解析简化 fixture 中 `icvp` / `bwsp` 内部的 `code(4) + type(4) + length(4) + value` 序列。
-    private static func parseSimpleFields(
-        _ blob: Data,
-        _ body: (String, String, Data) -> Void
-    ) {
-        var cursor = 0
-        while cursor + 12 <= blob.count {
-            let code = String(data: blob[cursor..<cursor + 4], encoding: .ascii) ?? ""
-            cursor += 4
-            let type = String(data: blob[cursor..<cursor + 4], encoding: .ascii) ?? ""
-            cursor += 4
-            let length = Int(readUInt32(blob, at: cursor))
-            cursor += 4
-            guard length >= 0, cursor + length <= blob.count else { return }
-            let value = Data(blob[cursor..<cursor + length])
-            cursor += length
-            body(code, type, value)
-        }
-    }
-
     // MARK: - Value decoding
-
-    private static func readDouble(_ data: Data, type: String) -> CGFloat? {
-        switch type {
-        case "doub":
-            guard data.count >= 8 else { return nil }
-            let bits = UInt64(data[0]) << 56 | UInt64(data[1]) << 48
-                | UInt64(data[2]) << 40 | UInt64(data[3]) << 32
-                | UInt64(data[4]) << 24 | UInt64(data[5]) << 16
-                | UInt64(data[6]) << 8 | UInt64(data[7])
-            return CGFloat(Double(bitPattern: bits))
-        case "shor", "long":
-            guard data.count >= 4 else { return nil }
-            return CGFloat(Int32(bitPattern: readUInt32(data, at: 0)))
-        default:
-            return nil
-        }
-    }
 
     private static func readColor(_ data: Data) -> [CGFloat]? {
         guard data.count >= 12 else { return nil }
@@ -434,19 +311,6 @@ public enum DSStoreReader {
             return CGFloat(raw) / 65535.0
         }
         return components
-    }
-
-    private static func readWindowBounds(_ data: Data, type: String) -> CGRect? {
-        let text: String
-        switch type {
-        case "type":
-            text = String(data: data, encoding: .utf16BigEndian) ?? ""
-        case "ustr":
-            text = String(data: data, encoding: .macOSRoman) ?? ""
-        default:
-            return nil
-        }
-        return parseBoundsString(text)
     }
 
     private static func parseBoundsString(_ text: String) -> CGRect? {
