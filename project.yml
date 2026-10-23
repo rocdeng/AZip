@@ -63,6 +63,10 @@ targets:
     platform: macOS
     sources:
       - path: Tests/AZipCoreTests
+        excludes:
+          - "Fixtures/**"
+      - path: Tests/AZipCoreTests/Fixtures
+        buildPhase: resources
     dependencies:
       - target: AZipCore
     settings:
