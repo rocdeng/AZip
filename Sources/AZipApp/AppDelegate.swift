@@ -2,6 +2,9 @@ import AppKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// 已排入一次延迟退出流程；期间再次收到回调只返回 `.terminateLater`，避免重复 reply。
+    private var isTerminating = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         DMGSessionModel.shared.offerAssociationIfNeeded()
@@ -15,15 +18,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // 关闭窗口后进程必须继续存活，异步的 closeSession() 才有机会卸载卷。
-        false
+        // 恢复单窗口语义：关掉最后一个窗口就退出。若有挂载或收尾在进行，
+        // applicationShouldTerminate 会等它们结束再回复系统。
+        true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let model = DMGSessionModel.shared
-        guard model.mount != nil else { return .terminateNow }
+        guard model.isBusy else { return .terminateNow }
+        // 已在等待收尾：只继续等待，不再排第二个 reply。
+        guard !isTerminating else { return .terminateLater }
+        isTerminating = true
 
-        // 还有卷挂着：先卸载，完成后回复系统。
+        // 有挂载、挂载中或卸载中：先等收尾完成，再回复系统。
         Task { @MainActor in
             await model.closeSession()
             NSApp.reply(toApplicationShouldTerminate: true)

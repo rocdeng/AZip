@@ -48,6 +48,12 @@ final class DMGSessionModel: ObservableObject {
     private var sessionToken = UUID()
     /// 串行化 `open`，避免两次快速打开同时 attach 导致前一个挂载卷泄漏。
     private var openTask: Task<Void, Never>?
+    /// 当前 `openTask` 的标识；任务结束时仅当标识仍匹配才清空 `openTask`。
+    private var openTaskID: UUID?
+    /// 收尾（卸载）正在进行中。
+    private var isTearingDown = false
+    /// 正在执行的收尾任务；重复调用 `closeSession` 时 join 它，避免提前返回。
+    private var teardownTask: Task<Void, Never>?
     /// 根目录条目，供 `rootApplications` 使用，不受当前浏览目录影响。
     private var rootEntries: [VolumeEntry] = []
     /// 窗口尚未出现时暂存的尺寸，由 `applyPendingWindowSize(to:)` 应用。
@@ -66,6 +72,20 @@ final class DMGSessionModel: ObservableObject {
 
     var rootApplications: [VolumeEntry] {
         VolumeScanner.applications(in: rootEntries)
+    }
+
+    /// 有任何挂载、挂载中、卸载中或进行中的安装时都为 true。
+    /// 退出流程据此决定是否等待收尾，避免留下无人回收的挂载卷。
+    var isBusy: Bool {
+        if mount != nil || isTearingDown || openTask != nil {
+            return true
+        }
+        switch state {
+        case .mounting, .installing:
+            return true
+        case .idle, .browsing, .failed:
+            return false
+        }
     }
 
     // MARK: - Lifecycle
@@ -110,11 +130,21 @@ final class DMGSessionModel: ObservableObject {
         // 因此改为纯串行等待；被取代的 open 由 `performOpen` 开头的令牌检查直接返回，
         // 若它恰好已经挂载完成，则在同一处令牌检查里退出自己挂的卷。
         let previous = openTask
+        let taskID = UUID()
+        openTaskID = taskID
         openTask = Task { [weak self] in
             _ = await previous?.value
             guard let self else { return }
             await self.performOpen(dmgURL, token: token)
+            self.finishOpenTask(taskID)
         }
+    }
+
+    /// 任务结束时清空 `openTask`，否则已完成（但对象仍被持有）的 open 会让 `isBusy` 永远为 true。
+    private func finishOpenTask(_ id: UUID) {
+        guard openTaskID == id else { return }
+        openTask = nil
+        openTaskID = nil
     }
 
     private func performOpen(_ dmgURL: URL, token: UUID) async {
@@ -292,6 +322,35 @@ final class DMGSessionModel: ObservableObject {
     /// 关闭当前会话：重置全部会话状态并退出本次会话挂载的卷。
     /// 由应用层在窗口关闭 / 进程终止时 `await` 调用。
     func closeSession() async {
+        // 已有收尾在进行时 join 它，绝不另起一份提前返回：退出流程必须等到
+        // detach 真正完成才能回复系统，否则进程会在卷卸载前退出。
+        if let existing = teardownTask {
+            await existing.value
+            // 收尾期间若又开了新会话，把它也一并收掉。
+            if isBusy {
+                await closeSession()
+            }
+            return
+        }
+
+        isTearingDown = true
+        let task = Task { @MainActor [weak self] in
+            // 在任务体内清除状态，确保 `await task.value` 的调用方恢复时标记已复位。
+            defer {
+                self?.isTearingDown = false
+                self?.teardownTask = nil
+            }
+            await self?.performCloseSession()
+        }
+        teardownTask = task
+        await task.value
+        // 收尾期间若又开了新会话，继续收尾，直到真正空闲再返回。
+        if isBusy {
+            await closeSession()
+        }
+    }
+
+    private func performCloseSession() async {
         // 让仍在进行的 open / install 续体失效，避免它们在关闭后继续写状态。
         sessionToken = UUID()
         // 本次关闭操作的令牌：detach 期间若用户又开了新会话，旧会话的错误不能写进新会话。
