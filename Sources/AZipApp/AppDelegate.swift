@@ -25,6 +25,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let model = DMGSessionModel.shared
+        // 安装期间退出会中断 ditto 并从源卷卸载，留下暂存残片，必须等安装完成。
+        guard !model.isInstalling else {
+            model.warnInstallInProgress()
+            return .terminateCancel
+        }
         guard model.isBusy else { return .terminateNow }
         // 已在等待收尾：只继续等待，不再排第二个 reply。
         guard !isTerminating else { return .terminateLater }

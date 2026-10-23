@@ -8,15 +8,43 @@ struct WindowConfigurator: NSViewRepresentable {
     var onWindowReady: (@MainActor (NSWindow) -> Void)?
     /// 真实窗口关闭时的回调。SwiftUI 的 `onDisappear` 在启动时会被误触发，不能用于卸载卷。
     var onWindowClose: (@MainActor () -> Void)?
+    /// 返回 false 可阻止窗口关闭（例如安装进行中）。
+    var shouldClose: (@MainActor () -> Bool)?
 
     @MainActor
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, NSWindowDelegate {
         weak var window: NSWindow?
         var onClose: (@MainActor () -> Void)?
+        var shouldClose: (@MainActor () -> Bool)?
+        /// 被替换掉的原窗口 delegate；我们未实现的回调仍转交给它。
+        /// AppKit 只会在主线程访问它，但 `responds(to:)` / `forwardingTarget(for:)`
+        /// 是 nonisolated 重写，Swift 6 无法自动证明隔离，故显式标注。
+        nonisolated(unsafe) var previousDelegate: NSWindowDelegate?
+        /// `willClose` 既作为通知观察者、又作为 delegate 回调触发，只应通知一次。
+        fileprivate var closeNotified = false
 
         /// 窗口通知总在主线程发出，与 MainActor 一致。
         @objc func windowWillClose(_ notification: Notification) {
+            previousDelegate?.windowWillClose?(notification)
+            guard !closeNotified else { return }
+            closeNotified = true
             onClose?()
+        }
+
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            if let shouldClose, !shouldClose() { return false }
+            return previousDelegate?.windowShouldClose?(sender) ?? true
+        }
+
+        override func responds(to aSelector: Selector!) -> Bool {
+            super.responds(to: aSelector) || (previousDelegate?.responds(to: aSelector) ?? false)
+        }
+
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            if let previousDelegate, previousDelegate.responds(to: aSelector) {
+                return previousDelegate
+            }
+            return super.forwardingTarget(for: aSelector)
         }
     }
 
@@ -60,6 +88,9 @@ struct WindowConfigurator: NSViewRepresentable {
 
         onWindowReady?(window)
 
+        // 每次更新都同步最新的判断闭包。
+        coordinator.shouldClose = shouldClose
+
         // 只在首次看到该窗口时注册一次关闭监听。
         guard coordinator.window !== window else { return }
         if let previous = coordinator.window {
@@ -71,6 +102,12 @@ struct WindowConfigurator: NSViewRepresentable {
         }
         coordinator.window = window
         coordinator.onClose = onWindowClose
+        coordinator.closeNotified = false
+        // 接管窗口 delegate 以便拦截关闭；原 delegate 保留并转发其余回调。
+        if window.delegate !== coordinator {
+            coordinator.previousDelegate = window.delegate
+            window.delegate = coordinator
+        }
         NotificationCenter.default.addObserver(
             coordinator,
             selector: #selector(Coordinator.windowWillClose(_:)),

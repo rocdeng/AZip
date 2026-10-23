@@ -7,7 +7,10 @@ struct RootWindow: View {
     var body: some View {
         // 毛玻璃由 `WindowConfigurator` 在 AppKit 层铺满整个窗口；
         // 这里不再放任何不透明或材质背景，否则会盖住底层的 behindWindow 模糊。
-        content
+        VStack(spacing: 0) {
+            content
+            BottomBar(model: model)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .background(
             WindowConfigurator(
@@ -20,6 +23,14 @@ struct RootWindow: View {
                     // 用真实窗口关闭事件而不是 `onDisappear`：SwiftUI 启动时会重建根视图，
                     // `onDisappear` 会在挂载完成前误触发并作废会话令牌。
                     Task { await model.closeSession() }
+                },
+                shouldClose: {
+                    // 安装期间关窗会中断 ditto 并从源卷卸载，留下暂存残片。
+                    guard !model.isInstalling else {
+                        model.warnInstallInProgress()
+                        return false
+                    }
+                    return true
                 }
             )
         )
@@ -36,6 +47,24 @@ struct RootWindow: View {
                     .padding(.top, 52)
                     .onTapGesture { model.banner = nil }
             }
+        }
+        .sheet(item: $model.pendingApps) { selection in
+            InstallTargetSheet(
+                entries: selection.entries,
+                onSelect: { entry in
+                    model.installDirectly(entry)
+                },
+                onCancel: { model.pendingApps = nil }
+            )
+        }
+        .sheet(item: $model.pendingConflict) { request in
+            InstallConflictSheet(
+                appName: request.appURL.lastPathComponent,
+                onConfirm: {
+                    model.confirmConflict()
+                },
+                onCancel: { model.pendingConflict = nil }
+            )
         }
     }
 

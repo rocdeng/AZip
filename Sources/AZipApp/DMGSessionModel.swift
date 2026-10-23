@@ -54,6 +54,8 @@ final class DMGSessionModel: ObservableObject {
     private var isTearingDown = false
     /// 正在执行的收尾任务；重复调用 `closeSession` 时 join 它，避免提前返回。
     private var teardownTask: Task<Void, Never>?
+    /// 安装成功后退出源卷的任务；退出流程据此等待卸载完成。
+    private var detachTask: Task<Void, Never>?
     /// 根目录条目，供 `rootApplications` 使用，不受当前浏览目录影响。
     private var rootEntries: [VolumeEntry] = []
     /// 窗口尚未出现时暂存的尺寸，由 `applyPendingWindowSize(to:)` 应用。
@@ -74,10 +76,16 @@ final class DMGSessionModel: ObservableObject {
         VolumeScanner.applications(in: rootEntries)
     }
 
+    /// 安装（复制）正在进行中。退出/关窗流程据此拒绝中断安装。
+    var isInstalling: Bool {
+        if case .installing = state { return true }
+        return false
+    }
+
     /// 有任何挂载、挂载中、卸载中或进行中的安装时都为 true。
     /// 退出流程据此决定是否等待收尾，避免留下无人回收的挂载卷。
     var isBusy: Bool {
-        if mount != nil || isTearingDown || openTask != nil {
+        if mount != nil || isTearingDown || openTask != nil || detachTask != nil {
             return true
         }
         switch state {
@@ -86,6 +94,11 @@ final class DMGSessionModel: ObservableObject {
         case .idle, .browsing, .failed:
             return false
         }
+    }
+
+    /// 安装期间拒绝退出/关窗时向用户说明原因。
+    func warnInstallInProgress() {
+        banner = BannerMessage(text: "正在安装，请等待完成后再退出", isError: true)
     }
 
     // MARK: - Lifecycle
@@ -298,8 +311,16 @@ final class DMGSessionModel: ObservableObject {
                 self.banner = BannerMessage(text: "已安装 \(installed.lastPathComponent)", isError: false)
                 self.reloadCurrent()
                 if let mountedVolume {
-                    if self.mount == mountedVolume { self.mount = nil }
-                    try? await DiskImageMounter.detach(mountedVolume)
+                    // 先完成卸载再清 mount：这期间 `isBusy` 仍为 true，
+                    // 用户此时 ⌘Q 会等待卸载结束，不会在 detach 前退出。
+                    let detachTask = Task { @MainActor [weak self] in
+                        try? await DiskImageMounter.detach(mountedVolume)
+                        guard let self else { return }
+                        if self.mount == mountedVolume { self.mount = nil }
+                        self.detachTask = nil
+                    }
+                    self.detachTask = detachTask
+                    await detachTask.value
                 }
                 guard token == self.sessionToken else { return }
                 self.state = .idle
@@ -359,6 +380,10 @@ final class DMGSessionModel: ObservableObject {
         // 不能取消 openTask：ProcessRunner 没有取消处理，取消只会让 attach 在 hdiutil
         // 继续运行时抛错，卷挂上了却没有 MountResult 可以回收。这里等它自然结束后再收尾。
         let inFlight = openTask
+        // 安装后的卸载可能正在进行：等它落定，避免对同一卷重复 detach。
+        let inFlightDetach = detachTask
+
+        _ = await inFlightDetach?.value
 
         let mountedVolume = mount
         mount = nil
