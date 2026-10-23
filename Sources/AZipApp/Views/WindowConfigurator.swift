@@ -2,6 +2,9 @@ import AppKit
 import SwiftUI
 
 struct WindowConfigurator: NSViewRepresentable {
+    /// 窗口就绪后的回调，用于应用会话在窗口出现前排队的尺寸。
+    var onWindowReady: (@MainActor (NSWindow) -> Void)?
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
@@ -16,6 +19,7 @@ struct WindowConfigurator: NSViewRepresentable {
         }
     }
 
+    @MainActor
     private func configure(_ window: NSWindow?) {
         guard let window else { return }
         window.titleVisibility = .hidden
@@ -26,5 +30,6 @@ struct WindowConfigurator: NSViewRepresentable {
         window.isMovableByWindowBackground = true
         window.hasShadow = true
         window.minSize = NSSize(width: 480, height: 320)
+        onWindowReady?(window)
     }
 }

@@ -79,6 +79,15 @@ final class DMGSessionModel: ObservableObject {
         showAssociationSheet = true
     }
 
+    func reportPendingBackups() {
+        let backups = AppInstaller.pendingBackups(in: URL(fileURLWithPath: "/Applications"))
+        guard !backups.isEmpty else { return }
+        banner = BannerMessage(
+            text: "上次安装未完成，旧版本备份位于：\(backups[0].path)",
+            isError: true
+        )
+    }
+
     func open(dmgURL: URL) {
         // 立刻切换到新会话：旧会话的异步续体从此不再有权写状态。
         sessionToken = UUID()
