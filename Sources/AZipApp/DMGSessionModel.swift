@@ -55,7 +55,12 @@ final class DMGSessionModel: ObservableObject {
     /// 正在执行的收尾任务；重复调用 `closeSession` 时 join 它，避免提前返回。
     private var teardownTask: Task<Void, Never>?
     /// 安装成功后退出源卷的任务；退出流程据此等待卸载完成。
-    private var detachTask: Task<Void, Never>?
+    /// 返回值为卸载错误：nil 表示已卸载，非 nil 表示失败、卷仍挂载。
+    private var detachTask: Task<Error?, Never>?
+    /// 安装是否仍在进行（含安装成功后的卸载阶段）。
+    /// 安装状态的单一事实来源：不能用 `state` 推断，因为卸载期间必须保持安装态，
+    /// 否则会出现“安装按钮可点、⌘Q 可退出、可切换磁盘映像”的竞态。
+    @Published private(set) var isInstallInFlight = false
     /// 根目录条目，供 `rootApplications` 使用，不受当前浏览目录影响。
     private var rootEntries: [VolumeEntry] = []
     /// 窗口尚未出现时暂存的尺寸，由 `applyPendingWindowSize(to:)` 应用。
@@ -76,16 +81,16 @@ final class DMGSessionModel: ObservableObject {
         VolumeScanner.applications(in: rootEntries)
     }
 
-    /// 安装（复制）正在进行中。退出/关窗流程据此拒绝中断安装。
+    /// 安装（复制）正在进行中，或安装成功后的卸载尚未结束。
+    /// 退出/关窗/切换磁盘映像流程据此拒绝中断安装。
     var isInstalling: Bool {
-        if case .installing = state { return true }
-        return false
+        isInstallInFlight
     }
 
     /// 有任何挂载、挂载中、卸载中或进行中的安装时都为 true。
     /// 退出流程据此决定是否等待收尾，避免留下无人回收的挂载卷。
     var isBusy: Bool {
-        if mount != nil || isTearingDown || openTask != nil || detachTask != nil {
+        if mount != nil || isTearingDown || openTask != nil || detachTask != nil || isInstallInFlight {
             return true
         }
         switch state {
@@ -122,6 +127,13 @@ final class DMGSessionModel: ObservableObject {
     }
 
     func open(dmgURL: URL) {
+        // 安装（含安装后的卸载）期间切换会话会卸载源卷，中断正在读取的复制，
+        // 且安装任务的错误会因令牌过期被吞掉。此时直接拒绝，不碰令牌与挂载。
+        guard !isInstallInFlight else {
+            banner = BannerMessage(text: "正在安装，请等待完成后再打开其他磁盘映像", isError: true)
+            return
+        }
+
         // 立刻切换到新会话：旧会话的异步续体从此不再有权写状态。
         sessionToken = UUID()
         let token = sessionToken
@@ -206,6 +218,9 @@ final class DMGSessionModel: ObservableObject {
     }
 
     func enter(_ entry: VolumeEntry) {
+        // 安装期间不得导航或再次触发安装：界面虽被进度视图覆盖，
+        // 键盘快捷键等路径仍可能到达这里。
+        guard !isInstallInFlight else { return }
         switch entry.kind {
         case .folder:
             // 同步捕获令牌：任务可能在新的 open 之后才启动，不能在任务内部再读。
@@ -232,12 +247,15 @@ final class DMGSessionModel: ObservableObject {
     }
 
     func goUp() {
-        guard !navigationStack.isEmpty else { return }
+        // 安装期间禁止导航：`reloadCurrent` 会把状态从 `.installing` 拉回 `.browsing`，
+        // 让安装按钮在 ditto 仍在运行时重新可用。
+        guard !isInstallInFlight, !navigationStack.isEmpty else { return }
         navigationStack.removeLast()
         reloadCurrent()
     }
 
     func goBackToRoot() {
+        guard !isInstallInFlight else { return }
         navigationStack.removeAll()
         reloadCurrent()
     }
@@ -259,6 +277,7 @@ final class DMGSessionModel: ObservableObject {
     // MARK: - Install
 
     func requestInstall(_ app: VolumeEntry) {
+        guard !isInstallInFlight else { return }
         let candidates = rootApplications
         if candidates.count > 1 {
             pendingApps = AppSelection(entries: candidates)
@@ -269,27 +288,34 @@ final class DMGSessionModel: ObservableObject {
 
     /// 由选择面板直接指定要安装的应用（不再重复弹面板）。
     func installDirectly(_ entry: VolumeEntry) {
+        guard !isInstallInFlight else { return }
         pendingApps = nil
         startInstall(entry.url, overwrite: false)
     }
 
     func confirmConflict() {
-        guard let request = pendingConflict else { return }
+        guard !isInstallInFlight, let request = pendingConflict else { return }
         pendingConflict = nil
         startInstall(request.appURL, overwrite: true)
     }
 
     private func startInstall(_ appURL: URL, overwrite: Bool) {
-        // 同一时刻只允许一个安装流程；失败路径一定会离开 .installing，因此该状态可信。
+        // 同一时刻只允许一个安装流程，包括安装成功后的卸载阶段。
+        // `isInstallInFlight` 是单一事实来源，`.installing` 检查仅作防御。
+        guard !isInstallInFlight else { return }
         if case .installing = state { return }
         pendingConflict = nil
 
         let token = sessionToken
         let mountedVolume = mount
+        isInstallInFlight = true
         state = .installing(app: appURL, progress: 0)
 
         Task { [weak self] in
             guard let self else { return }
+            // 所有退出路径（成功、冲突、失败）都必须复位该标志；
+            // 成功路径的 `defer` 在卸载 await 之后才执行，因此卸载期间仍为安装态。
+            defer { self.isInstallInFlight = false }
             do {
                 let installed = try await AppInstaller.install(
                     InstallRequest(
@@ -309,21 +335,47 @@ final class DMGSessionModel: ObservableObject {
                 )
                 guard token == self.sessionToken else { return }
                 self.banner = BannerMessage(text: "已安装 \(installed.lastPathComponent)", isError: false)
-                self.reloadCurrent()
+
+                // 保持 `.installing` 与 `isInstalling == true` 直到卸载完成：
+                // 期间安装按钮保持禁用，⌘Q / 关窗 / 打开其他映像都会被拒绝。
+                var detachError: Error?
                 if let mountedVolume {
                     // 先完成卸载再清 mount：这期间 `isBusy` 仍为 true，
                     // 用户此时 ⌘Q 会等待卸载结束，不会在 detach 前退出。
-                    let detachTask = Task { @MainActor [weak self] in
-                        try? await DiskImageMounter.detach(mountedVolume)
-                        guard let self else { return }
-                        if self.mount == mountedVolume { self.mount = nil }
-                        self.detachTask = nil
+                    let detachTask = Task { @MainActor [weak self] () -> Error? in
+                        do {
+                            try await DiskImageMounter.detach(mountedVolume)
+                            guard let self else { return nil }
+                            if self.mount == mountedVolume { self.mount = nil }
+                            self.detachTask = nil
+                            return nil
+                        } catch {
+                            guard let self else { return error }
+                            self.detachTask = nil
+                            return error
+                        }
                     }
                     self.detachTask = detachTask
-                    await detachTask.value
+                    detachError = await detachTask.value
                 }
                 guard token == self.sessionToken else { return }
-                self.state = .idle
+
+                if let detachError {
+                    // 卸载失败：保留 mount 以便后续收尾重试，而不是直接丢弃引用。
+                    self.banner = BannerMessage(
+                        text: "已安装，但无法推出磁盘映像：\(self.describe(detachError))",
+                        isError: true
+                    )
+                    self.reloadCurrent()
+                } else {
+                    // 安装与卸载都已完成，会话结束：清空根目录条目，
+                    // 否则 `.idle` 下 BottomBar 仍会认为有可安装应用。
+                    self.mount = nil
+                    self.rootEntries = []
+                    self.navigationStack = []
+                    self.layout = nil
+                    self.state = .idle
+                }
             } catch InstallError.conflict(_) {
                 guard token == self.sessionToken else { return }
                 self.pendingConflict = ConflictRequest(appURL: appURL)

@@ -4,10 +4,6 @@ import SwiftUI
 struct BottomBar: View {
     @ObservedObject var model: DMGSessionModel
 
-    private var isInstalling: Bool {
-        model.isInstalling
-    }
-
     var body: some View {
         HStack(spacing: 10) {
             if case .browsing = model.state {
@@ -28,7 +24,8 @@ struct BottomBar: View {
                     .padding(.vertical, 7)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.rootApplications.isEmpty || isInstalling)
+            // 安装（含安装成功后的卸载）期间禁用，避免重复触发安装。
+            .disabled(model.rootApplications.isEmpty || model.isInstalling)
             .keyboardShortcut("i", modifiers: [.command, .shift])
         }
         .padding(.horizontal, 14)

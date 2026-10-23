@@ -25,9 +25,11 @@ struct WindowConfigurator: NSViewRepresentable {
 
         /// 窗口通知总在主线程发出，与 MainActor 一致。
         @objc func windowWillClose(_ notification: Notification) {
-            previousDelegate?.windowWillClose?(notification)
+            // 该回调既来自通知观察者、又来自 delegate，先判重再转发，
+            // 保证原 delegate 与本类的关闭回调各自只执行一次。
             guard !closeNotified else { return }
             closeNotified = true
+            previousDelegate?.windowWillClose?(notification)
             onClose?()
         }
 
