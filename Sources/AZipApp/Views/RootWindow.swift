@@ -6,30 +6,26 @@ struct RootWindow: View {
 
     var body: some View {
         ZStack {
-            VisualEffectBackground(material: .hudWindow)
+            VisualEffectBackground()
 
-            VStack(spacing: 0) {
-                NavigationBar(
-                    title: model.currentDirectoryName,
-                    canGoUp: !model.navigationStack.isEmpty,
-                    onBackToRoot: model.goBackToRoot,
-                    onUp: model.goUp
-                )
-                Divider().opacity(0.15)
-                content
-            }
+            content
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .background(
-            WindowConfigurator { window in
-                model.applyPendingWindowSize(to: window)
-            }
+            WindowConfigurator(
+                onWindowReady: { window in
+                    model.applyPendingWindowSize(to: window)
+                },
+                onWindowClose: {
+                    // `closeSession` 是 async：关窗时在任务里等待卸载完成（对应 spec 7.3）。
+                    // 用真实窗口关闭事件而不是 `onDisappear`：SwiftUI 启动时会重建根视图，
+                    // `onDisappear` 会在挂载完成前误触发并作废会话令牌。
+                    Task { await model.closeSession() }
+                }
+            )
         )
         .frame(minWidth: 480, minHeight: 320)
-        .onDisappear {
-            // `closeSession` 是 async：关窗时在任务里等待卸载完成（对应 spec 7.3）。
-            Task { await model.closeSession() }
-        }
+        .background { navigationShortcuts }
         .overlay(alignment: .top) {
             if let banner = model.banner {
                 Text(banner.text)
@@ -42,6 +38,19 @@ struct RootWindow: View {
                     .onTapGesture { model.banner = nil }
             }
         }
+    }
+
+    /// 导航栏已移除，只保留键盘快捷键（⌘[ / ⌘↑）。
+    private var navigationShortcuts: some View {
+        VStack(spacing: 0) {
+            Button("返回根目录") { model.goBackToRoot() }
+                .keyboardShortcut("[", modifiers: .command)
+            Button("上一级") { model.goUp() }
+                .keyboardShortcut(.upArrow, modifiers: .command)
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder
