@@ -4,19 +4,25 @@ import UniformTypeIdentifiers
 
 struct RootWindow: View {
     @ObservedObject var model: DMGSessionModel
+    @StateObject private var archive = ArchiveSession.shared
     @State private var isDropTargeted = false
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         // 毛玻璃由 `WindowConfigurator` 在 AppKit 层铺满整个窗口；
         // 这里不再放任何不透明或材质背景，否则会盖住底层的 behindWindow 模糊。
-        // 底部栏浮在内容之上：DMG 的背景图必须占满整个窗口，
-        // 不能让工具栏参与布局把它挤掉一截。
-        // 内容与底部安装栏上下排布：按钮占独立一条，不叠在 DMG 内容上。
-        VStack(spacing: 0) {
-            content
-                .padding(.top, DMGSessionModel.titleBarInset)
-            BottomBar(model: model)
+        Group {
+            if let job = archive.job {
+                ExtractView(session: archive, job: job)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // 内容与底部安装栏上下排布：按钮占独立一条，不叠在 DMG 内容上。
+                VStack(spacing: 0) {
+                    content
+                        .padding(.top, DMGSessionModel.titleBarInset)
+                    BottomBar(model: model)
+                }
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .background(
@@ -117,9 +123,17 @@ struct RootWindow: View {
             } else {
                 url = nil
             }
-            guard let url, url.pathExtension.lowercased() == "dmg" else { return }
+            guard let url else { return }
+            let ext = url.pathExtension.lowercased()
+            guard ext == "dmg" || ArchiveSession.supportedExtensions.contains(ext) else {
+                return
+            }
             Task { @MainActor in
-                DMGSessionModel.shared.open(dmgURL: url)
+                if ext == "dmg" {
+                    DMGSessionModel.shared.open(dmgURL: url)
+                } else {
+                    ArchiveSession.shared.extract(url: url)
+                }
             }
         }
         return true
@@ -127,6 +141,9 @@ struct RootWindow: View {
 
     /// 未打开文件时只显示 "AZip"，打开后显示 "AZip - 文件名"。
     private var windowTitle: String {
+        if let job = archive.job {
+            return "AZip - \(job.sourceURL.lastPathComponent)"
+        }
         switch model.state {
         case .idle, .failed:
             return "AZip"

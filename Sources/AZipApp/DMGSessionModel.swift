@@ -581,10 +581,25 @@ final class DMGSessionModel: ObservableObject {
 
     /// 由应用层在真实主窗口出现后调用，应用暂存的窗口尺寸。
     func applyPendingWindowSize(to window: NSWindow) {
+        mainWindow = window
         guard let size = pendingWindowSize else { return }
         pendingWindowSize = nil
         window.setContentSize(windowContentSize(for: size))
         window.center()
+    }
+
+    /// 主窗口的弱引用，由根视图出现时登记。
+    private(set) weak var mainWindow: NSWindow?
+
+    /// 直接启动（没有要打开的文件）时隐藏空的主窗口，只留设置窗口。
+    func hideMainWindow() {
+        mainWindow?.orderOut(nil)
+    }
+
+    /// 有文件要展示时把主窗口带回前台。
+    func showMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        mainWindow?.makeKeyAndOrderFront(nil)
     }
 
     private func describe(_ error: Error) -> String {

@@ -17,14 +17,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
             guard let self, !self.didReceiveOpenRequest else { return }
             guard case .idle = DMGSessionModel.shared.state else { return }
+            // 直接运行时不要那个空的主窗口，只显示设置。
+            DMGSessionModel.shared.hideMainWindow()
             DMGSessionModel.shared.shouldOpenSettings = true
         }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        didReceiveOpenRequest = true
-        for url in urls where url.pathExtension.lowercased() == "dmg" {
-            DMGSessionModel.shared.open(dmgURL: url)
+        DMGSessionModel.shared.showMainWindow()
+        for url in urls {
+            let ext = url.pathExtension.lowercased()
+            if ext == "dmg" {
+                didReceiveOpenRequest = true
+                DMGSessionModel.shared.open(dmgURL: url)
+            } else if ArchiveSession.supportedExtensions.contains(ext) {
+                didReceiveOpenRequest = true
+                ArchiveSession.shared.extract(url: url)
+            }
         }
     }
 
