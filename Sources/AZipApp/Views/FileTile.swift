@@ -9,14 +9,26 @@ struct FileTile: View {
 
     @State private var isHovering = false
 
-    var body: some View {
-        VStack(spacing: 4) {
-            // 直接对符号链接路径取图标：系统已把「文件夹 + 别名徽章」合成好，
-            // 自己解析目标再叠角标反而会丢掉徽章、换成闭合文件夹。
+    /// 归档类文件用自绘图标，其余交给系统。
+    @ViewBuilder
+    private var iconView: some View {
+        if let style = FileTypeIconStyle.style(
+            forExtension: entry.url.pathExtension
+        ) {
+            FileTypeIcon(style: style)
+        } else {
             Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            // 直接对符号链接路径取图标：系统已把「文件夹 + 别名徽章」合成好，
+            // 自己解析目标再叠角标反而会丢掉徽章、换成闭合文件夹。
+            iconView
                 .frame(width: iconSize, height: iconSize)
 
             Text(entry.name)
