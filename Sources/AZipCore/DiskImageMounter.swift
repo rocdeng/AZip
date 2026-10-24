@@ -19,10 +19,20 @@ public enum MountError: Error, Sendable {
 
 public enum DiskImageMounter {
     private static let hdiutil = "/usr/bin/hdiutil"
-    private static let diskutil = "/usr/sbin/diskutil"
+
+    /// 快速检查文件头是否带有 Apple 加密磁盘映像魔数（`encrcdsa` / `cdsaencr`）。
+    public static func hasEncryptedMagic(_ dmgURL: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: dmgURL) else { return false }
+        defer { try? handle.close() }
+        guard let head = try? handle.read(upToCount: 8), head.count == 8 else { return false }
+        return head == Data("encrcdsa".utf8) || head == Data("cdsaencr".utf8)
+    }
 
     /// 是否为加密映像（需要密码才能挂载）。
     public static func isEncrypted(_ dmgURL: URL) async -> Bool {
+        if hasEncryptedMagic(dmgURL) {
+            return true
+        }
         guard let result = try? await ProcessRunner.run(
             hdiutil, ["isencrypted", dmgURL.path], timeoutSeconds: 20
         ) else {
@@ -31,19 +41,33 @@ public enum DiskImageMounter {
         return result.stdout.contains("encrypted: YES")
     }
 
+    /// 构造传给 `hdiutil attach` 的标准输入字节流：
+    /// - `hdiutil -stdinpass` 从 `fd 0` 逐字节读取口令，**仅以 `\0`（NUL）或 EOF 结束**，不以 `\n` 结束；
+    /// - 若 DMG 同时带有软件许可协议（SLA，如第三方站点塞入的弹窗说明），`hdiutil` 解密后会继续从
+    ///   `fd 0` 读取 1 字节回答 `Agree Y/N? `。若此时已到 EOF，就会直接返回 `attach canceled`；
+    /// - 因此口令后必须紧跟 `\0Y\n`（未加密映像也传 `Y\n` 以自动同意可能存在的 SLA）。
+    public static func makeHdiutilStandardInput(password: String?) -> String {
+        if let password {
+            return "\(password)\0Y\n"
+        }
+        return "Y\n"
+    }
+
     public static func attach(_ dmgURL: URL, password: String? = nil) async throws -> MountResult {
-        // macOS 26 起 `hdiutil attach` 已弃用，官方替代是 `diskutil image attach`；
-        // 后者也支持从 stdin 读取口令，避免弹出系统密码框。
+        // 必须使用 `hdiutil attach`（且不能加 `-quiet`）：
+        // 1. `diskutil image attach` 不支持含 UDIF 软件许可协议（SLA）的映像，会直接报 `attach canceled`；
+        // 2. `hdiutil attach` 若加了 `-quiet`，遇到 SLA 时会尝试打开 `/dev/tty`，在 GUI 进程中因无控制终端
+        //    直接返回 `attach canceled`；不加 `-quiet` 时则会从 stdin 读取 `Y\n` 自动同意协议。
         var arguments = [
-            "image", "attach", dmgURL.path, "--plist", "--readOnly", "--nobrowse"
+            "attach", dmgURL.path, "-plist", "-nobrowse", "-noautoopen", "-readonly", "-noverify"
         ]
         if password != nil {
-            arguments.append("--stdinpass")
+            arguments.append("-stdinpass")
         }
         let result = try await ProcessRunner.run(
-            diskutil,
+            hdiutil,
             arguments,
-            standardInput: password.map { $0 + "\n" },
+            standardInput: makeHdiutilStandardInput(password: password),
             timeoutSeconds: 120
         )
         guard result.status == 0 else {
@@ -99,8 +123,8 @@ public enum DiskImageMounter {
     }
 
     public static func parseAttachOutput(_ data: Data) throws -> MountResult {
-        // 某些第三方 dmg 会在 plist 之前打印广告/说明文本，直接整体解析会失败；
-        // 从第一个 "<?xml" 起截取。
+        // 带有 SLA（软件许可协议）的 dmg 在挂载时，hdiutil 会先把协议正文与 "Agree Y/N?"
+        // 打到 stdout，随后才输出 XML plist；从第一个 "<?xml" 起截取即可。
         var payload = data
         if let text = String(data: data, encoding: .utf8),
            let range = text.range(of: "<?xml") {
@@ -119,7 +143,6 @@ public enum DiskImageMounter {
                 let mountPoint = entity["mount-point"] as? String,
                 let rawEntry = entity["dev-entry"] as? String
             else { continue }
-            // diskutil 返回 "disk8s1"，hdiutil 返回 "/dev/disk8s1"；统一成后者。
             let deviceEntry = rawEntry.hasPrefix("/") ? rawEntry : "/dev/" + rawEntry
             let volumeName = (entity["volume-name"] as? String)
                 ?? URL(fileURLWithPath: mountPoint).lastPathComponent

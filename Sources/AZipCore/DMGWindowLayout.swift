@@ -1,4 +1,5 @@
 import CoreGraphics
+import ImageIO
 import Foundation
 
 public struct DMGWindowLayout: Sendable {
@@ -19,7 +20,9 @@ public struct DMGWindowLayout: Sendable {
         let background = resolveBackgroundImage(mountPoint: mountPoint, document: document)
         guard background != nil || !document.iconPositions.isEmpty else { return nil }
 
-        let rawSize = document.windowFrame?.size ?? defaultSize
+        let rawSize = document.windowFrame?.size
+            ?? backgroundImagePointSize(background)
+            ?? defaultSize
         let baseSize = rawSize.width.isFinite && rawSize.height.isFinite ? rawSize : defaultSize
         let contentSize = CGSize(
             width: min(max(baseSize.width, minimumSize.width), maximumSize.width),
@@ -38,6 +41,22 @@ public struct DMGWindowLayout: Sendable {
             iconPositions: document.iconPositions,
             iconSize: iconSize
         )
+    }
+
+    /// 有些 DMG（dmgcanvas 生成）不写窗口尺寸，但背景图就是设计尺寸。
+    /// 背景图常为 2x，按最长边是否超过 1200 判断缩放。
+    private static func backgroundImagePointSize(_ url: URL?) -> CGSize? {
+        guard let url,
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any],
+              let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+              let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue,
+              width > 0, height > 0 else {
+            return nil
+        }
+        let scale: Double = max(width, height) > 1200 ? 2 : 1
+        return CGSize(width: width / scale, height: height / scale)
     }
 
     // MARK: - Background

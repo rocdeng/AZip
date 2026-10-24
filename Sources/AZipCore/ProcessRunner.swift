@@ -40,6 +40,11 @@ public enum ProcessRunner {
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
 
+        // 防止 hdiutil 在展示带软件许可协议（SLA）的 DMG 时调用默认分页器 `more` 造成阻塞。
+        var env = ProcessInfo.processInfo.environment
+        env["PAGER"] = "/bin/cat"
+        process.environment = env
+
         let outPipe = Pipe()
         let errPipe = Pipe()
         process.standardOutput = outPipe

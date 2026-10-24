@@ -636,22 +636,34 @@ final class DMGSessionModel: ObservableObject {
     static let bottomBarInset: CGFloat = 78
 
     private func windowContentSize(for size: CGSize) -> NSSize {
-        NSSize(
-            width: size.width,
-            height: size.height + Self.titleBarInset + Self.bottomBarInset
-        )
+        let insets = Self.titleBarInset + Self.bottomBarInset
+        var width = size.width
+        var height = size.height + insets
+
+        // 不能超过屏幕可用区域，否则底部安装按钮会被顶出屏幕。
+        if let screen = NSScreen.main {
+            let visible = screen.visibleFrame
+            width = min(width, visible.width - 40)
+            height = min(height, visible.height - 40)
+        }
+        return NSSize(width: width, height: height)
     }
 
     private func resizeWindow(to size: CGSize) {
-        guard let window = NSApp.windows.first(where: {
-            $0.isVisible && $0.canBecomeMain && !($0 is NSPanel)
-        }) else {
+        // WindowGroup 可能同时存在多个主窗口，全部按同一尺寸处理，
+        // 否则用户看到的那扇可能不是被调整的那扇。
+        let windows = NSApp.windows.filter {
+            $0.identifier?.rawValue == "AZipMainWindow"
+        }
+        guard !windows.isEmpty else {
             pendingWindowSize = size
             return
         }
         pendingWindowSize = nil
-        window.setContentSize(windowContentSize(for: size))
-        window.center()
+        for window in windows {
+            window.setContentSize(windowContentSize(for: size))
+            window.center()
+        }
     }
 
     /// 由应用层在真实主窗口出现后调用，应用暂存的窗口尺寸。

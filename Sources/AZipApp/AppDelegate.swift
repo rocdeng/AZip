@@ -14,8 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
     }
 
+    private var keyObserver: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+
         DMGSessionModel.shared.reportPendingBackups()
     }
 

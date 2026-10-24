@@ -35,21 +35,30 @@ struct LayoutContentView: View {
             }
 
             if !unpositionedEntries.isEmpty {
+                // 没有坐标数据的 DMG（旧式 .ICVO 记录）：居中排成网格，
+                // 而不是挤在底部横条里。
                 VStack {
                     Spacer()
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(unpositionedEntries) { entry in
-                                FileTile(entry: entry, iconSize: layout.iconSize) {
-                                    onOpen(entry)
-                                }
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 96), spacing: 20)],
+                        spacing: 16
+                    ) {
+                        ForEach(unpositionedEntries) { entry in
+                            FileTile(entry: entry, iconSize: layout.iconSize) {
+                                onOpen(entry)
                             }
                         }
-                        .padding(12)
                     }
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                    .padding(12)
+                    .frame(maxWidth: min(CGFloat(unpositionedEntries.count) * 116, 520))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                    .background(
+                        .ultraThinMaterial,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                    Spacer()
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
