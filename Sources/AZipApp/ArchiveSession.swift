@@ -57,7 +57,10 @@ final class ArchiveSession: ObservableObject {
     static var supportedExtensions: Set<String> { ArchiveExtractor.supportedExtensions }
 
     func extract(url: URL) {
-        guard job == nil else { return }
+        guard job == nil else {
+            if !pendingURLs.contains(url) { pendingURLs.append(url) }
+            return
+        }
 
         let destination = ArchiveExtractor.defaultDestination(for: url)
         cancelFlag.reset()
@@ -114,10 +117,7 @@ final class ArchiveSession: ObservableObject {
                     self.job = current
                     self.elapsedTask?.cancel()
                     NSSound(named: NSSound.Name("Submarine"))?.play()
-                    self.scheduleTermination(after: 1.2) {
-                        if case .finished = $0 { return true }
-                        return false
-                    }
+                    self.advanceOrTerminate(after: 1.2)
 
                     // 用户显式勾选「解压后删除压缩包」时才动原文件，
                     // 且只移到废纸篓（可恢复），不做不可逆删除。
@@ -134,10 +134,7 @@ final class ArchiveSession: ObservableObject {
                     guard let self, var current = self.job else { return }
                     if case ArchiveError.cancelled = error {
                         current.phase = .cancelled
-                        self.scheduleTermination(after: 0.6) {
-                            if case .cancelled = $0 { return true }
-                            return false
-                        }
+                        self.advanceOrTerminate(after: 0.6)
                     } else {
                         current.phase = .failed(error.localizedDescription)
                     }
@@ -148,6 +145,8 @@ final class ArchiveSession: ObservableObject {
     }
 
     private var elapsedTask: Task<Void, Never>?
+    /// 已有任务在进行时，新请求排队等待。
+    private var pendingURLs: [URL] = []
 
     /// 解压过程中每秒刷新「已用时间」，配合不确定进度条。
     private func startElapsedTimer(url: URL) {
@@ -204,16 +203,18 @@ final class ArchiveSession: ObservableObject {
     }
 
     /// 完成/取消后自动关闭浮窗；失败保留，让用户看到原因。
-    /// 解压结束（成功或取消）后关闭浮窗并退出应用——AZip 此时只是解压工具。
-    private func scheduleTermination(
-        after seconds: Double,
-        matches: @escaping (ExtractionJob.Phase) -> Bool
-    ) {
+    /// 结束后：若还有排队的压缩包则继续处理，否则关闭浮窗并退出应用。
+    private func advanceOrTerminate(after seconds: Double) {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
-            guard let current = job, matches(current.phase) else { return }
-            _ = current
-            job = nil
+            self.elapsedTask?.cancel()
+            if let next = pendingURLs.first {
+                pendingURLs.removeFirst()
+                self.job = nil
+                self.extract(url: next)
+                return
+            }
+            self.job = nil
             ExtractionWindowController.shared.close()
             NSApp.terminate(nil)
         }
