@@ -34,7 +34,7 @@ final class VolumeScannerTests: XCTestCase {
 
         XCTAssertFalse(names.contains(".DS_Store"))
         XCTAssertFalse(names.contains(".background"))
-        XCTAssertFalse(names.contains("Applications"), "指向 /Applications 的符号链接不应出现")
+        XCTAssertTrue(names.contains("Applications"), "DMG 里的 Applications 快捷方式要保留，用于按背景图定位显示")
         XCTAssertTrue(names.contains("MultiChat.app"))
         XCTAssertTrue(names.contains("Docs"))
         XCTAssertTrue(names.contains("readme.txt"))
@@ -47,6 +47,7 @@ final class VolumeScannerTests: XCTestCase {
         XCTAssertEqual(byName["MultiChat.app"], .application)
         XCTAssertEqual(byName["Docs"], .folder)
         XCTAssertEqual(byName["readme.txt"], .file)
+        XCTAssertEqual(byName["Applications"], .symbolicLink)
     }
 
     func testSortsFoldersAndAppsBeforeFiles() throws {

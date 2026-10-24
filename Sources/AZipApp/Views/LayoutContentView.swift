@@ -22,6 +22,8 @@ struct LayoutContentView: View {
             if let url = layout.backgroundImageURL, let image = NSImage(contentsOf: url) {
                 Image(nsImage: image)
                     .frame(width: image.size.width, height: image.size.height, alignment: .topLeading)
+                    // 背景图轻微透明，让窗口底层的毛玻璃材质透上来。
+                    .opacity(0.92)
             }
 
             ForEach(positionedEntries) { entry in

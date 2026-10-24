@@ -60,16 +60,17 @@ public enum VolumeScanner {
         var entries: [VolumeEntry] = []
         for url in urls {
             let name = url.lastPathComponent
-            if ignoredNames.contains(name) { continue }
+            // 隐藏条目（`.DS_Store`、`.background.tiff` 等）一律不展示：
+            // 它们是 Finder/DMG 的元数据，不是用户要安装或浏览的内容。
+            if name.hasPrefix(".") || ignoredNames.contains(name) { continue }
 
             let values = try? url.resourceValues(forKeys: Set(keys))
             let isSymbolicLink = values?.isSymbolicLink ?? false
 
             if isSymbolicLink {
-                if let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: url.path),
-                   destination == "/Applications" {
-                    continue
-                }
+                // 保留符号链接（典型是 DMG 里的 Applications 快捷方式）：
+                // 原生窗口里它是有图标的投放目标，过滤掉会留下一个空白方块。
+                // 它永远不是 `.application`，所以不会出现在可安装列表里。
                 entries.append(
                     VolumeEntry(url: url, kind: .symbolicLink, byteSize: nil, isHidden: values?.isHidden ?? false)
                 )

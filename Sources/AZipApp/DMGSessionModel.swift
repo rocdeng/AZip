@@ -553,6 +553,17 @@ final class DMGSessionModel: ObservableObject {
         orphanedMounts = remaining
     }
 
+    /// DMG 声明的窗口尺寸只覆盖内容区；窗口还要容纳标题栏与底部安装栏。
+    static let titleBarInset: CGFloat = 12
+    static let bottomBarInset: CGFloat = 78
+
+    private func windowContentSize(for size: CGSize) -> NSSize {
+        NSSize(
+            width: size.width,
+            height: size.height + Self.titleBarInset + Self.bottomBarInset
+        )
+    }
+
     private func resizeWindow(to size: CGSize) {
         guard let window = NSApp.windows.first(where: {
             $0.isVisible && $0.canBecomeMain && !($0 is NSPanel)
@@ -561,7 +572,7 @@ final class DMGSessionModel: ObservableObject {
             return
         }
         pendingWindowSize = nil
-        window.setContentSize(NSSize(width: size.width, height: size.height))
+        window.setContentSize(windowContentSize(for: size))
         window.center()
     }
 
@@ -569,7 +580,7 @@ final class DMGSessionModel: ObservableObject {
     func applyPendingWindowSize(to window: NSWindow) {
         guard let size = pendingWindowSize else { return }
         pendingWindowSize = nil
-        window.setContentSize(NSSize(width: size.width, height: size.height))
+        window.setContentSize(windowContentSize(for: size))
         window.center()
     }
 

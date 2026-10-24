@@ -4,35 +4,81 @@ import SwiftUI
 struct BottomBar: View {
     @ObservedObject var model: DMGSessionModel
 
-    var body: some View {
-        HStack(spacing: 10) {
-            if case .browsing = model.state {
-                Text(statusText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
+    private var isDisabled: Bool {
+        model.rootApplications.isEmpty || model.isInstalling
+    }
 
+    var body: some View {
+        VStack(spacing: 6) {
             Button {
                 if let first = model.rootApplications.first {
                     model.requestInstall(first)
                 }
             } label: {
-                Label("安装应用", systemImage: "bolt.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
+                label
             }
-            .buttonStyle(.borderedProminent)
-            // 安装（含安装成功后的卸载）期间禁用，避免重复触发安装。
-            .disabled(model.rootApplications.isEmpty || model.isInstalling)
+            .buttonStyle(.plain)
+            .disabled(isDisabled)
             .keyboardShortcut("i", modifiers: [.command, .shift])
+            .help("把应用安装到「应用程序」文件夹")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: Capsule())
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 10)
+        .padding(.bottom, 18)
+    }
+
+    private var label: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "bolt.fill")
+                .font(.system(size: 11, weight: .bold))
+            Text("安装应用")
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 11)
+        .background(glassFill)
+        .overlay(glassStroke)
+        .overlay(alignment: .top) { topHighlight }
+        .shadow(color: .black.opacity(0.10), radius: 8, y: 2)
+        .opacity(isDisabled ? 0.45 : 1)
+        .contentShape(Capsule())
+    }
+
+    /// 半透明玻璃填充：系统材质 + 一层自上而下变淡的白色。
+    private var glassFill: some View {
+        Capsule()
+            .fill(.ultraThinMaterial)
+            .overlay(
+                Capsule().fill(
+                    LinearGradient(
+                        colors: [.white.opacity(0.24), .white.opacity(0.04)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            )
+    }
+
+    /// 细白描边，顶部亮、底部暗，模拟玻璃厚度。
+    private var glassStroke: some View {
+        Capsule().strokeBorder(
+            LinearGradient(
+                colors: [.white.opacity(0.90), .white.opacity(0.18)],
+                startPoint: .top,
+                endPoint: .bottom
+            ),
+            lineWidth: 1
+        )
+    }
+
+    /// 顶部高光线。
+    private var topHighlight: some View {
+        Capsule()
+            .fill(.white.opacity(0.55))
+            .frame(height: 1)
+            .padding(.horizontal, 20)
+            .padding(.top, 1)
     }
 
     private var statusText: String {

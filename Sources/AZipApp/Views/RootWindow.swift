@@ -1,14 +1,20 @@
 import AZipCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct RootWindow: View {
     @ObservedObject var model: DMGSessionModel
+    @State private var isDropTargeted = false
 
     var body: some View {
         // 毛玻璃由 `WindowConfigurator` 在 AppKit 层铺满整个窗口；
         // 这里不再放任何不透明或材质背景，否则会盖住底层的 behindWindow 模糊。
+        // 底部栏浮在内容之上：DMG 的背景图必须占满整个窗口，
+        // 不能让工具栏参与布局把它挤掉一截。
+        // 内容与底部安装栏上下排布：按钮占独立一条，不叠在 DMG 内容上。
         VStack(spacing: 0) {
             content
+                .padding(.top, DMGSessionModel.titleBarInset)
             BottomBar(model: model)
         }
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -48,6 +54,20 @@ struct RootWindow: View {
                     .onTapGesture { model.banner = nil }
             }
         }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers)
+        }
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(0.7), lineWidth: 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(Color.accentColor.opacity(0.08))
+                    )
+                    .allowsHitTesting(false)
+            }
+        }
         .sheet(item: $model.pendingApps) { selection in
             InstallTargetSheet(
                 entries: selection.entries,
@@ -69,6 +89,26 @@ struct RootWindow: View {
         .sheet(isPresented: $model.showAssociationSheet) {
             AssociationSheet()
         }
+    }
+
+    /// 接收拖入的 `.dmg`：只处理第一个合法磁盘映像。
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        guard let provider = providers.first else { return false }
+        _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            let url: URL?
+            if let data = item as? Data {
+                url = URL(dataRepresentation: data, relativeTo: nil)
+            } else if let nsURL = item as? NSURL {
+                url = nsURL as URL
+            } else {
+                url = nil
+            }
+            guard let url, url.pathExtension.lowercased() == "dmg" else { return }
+            Task { @MainActor in
+                DMGSessionModel.shared.open(dmgURL: url)
+            }
+        }
+        return true
     }
 
     /// 未打开文件时只显示 "AZip"，打开后显示 "AZip - 文件名"。

@@ -23,7 +23,9 @@ public enum DiskImageMounter {
     public static func attach(_ dmgURL: URL) async throws -> MountResult {
         let result = try await ProcessRunner.run(
             hdiutil,
-            ["attach", dmgURL.path, "-plist", "-nobrowse", "-noautoopen", "-readonly"],
+            // `-noverify` 跳过整卷校验和：macOS 双击挂载同样不校验，
+            // 加上它才能做到接近系统原生速度（大 dmg 校验要几十秒）。
+            ["attach", dmgURL.path, "-plist", "-nobrowse", "-noautoopen", "-readonly", "-noverify"],
             timeoutSeconds: 120
         )
         guard result.status == 0 else {

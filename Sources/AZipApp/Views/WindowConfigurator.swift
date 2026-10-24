@@ -118,9 +118,11 @@ struct WindowConfigurator: NSViewRepresentable {
         )
     }
 
-    /// 把唯一一个 `NSVisualEffectView` 铺在 `contentView` 最底层，随窗口尺寸自适应。
-    /// 放在 AppKit 层而不是 SwiftUI 里：SwiftUI 内容会被标题栏安全区裁掉，
-    /// 材质无法覆盖标题栏区域，背后应用的文字就会从顶部透出来。
+    /// 把唯一一个 `NSVisualEffectView` 铺在 SwiftUI 宿主视图**之下**。
+    ///
+    /// 关键：材质视图不能作为 `contentView`（`NSHostingView`）的子视图添加——
+    /// 子视图绘制在父视图自身内容之上，会把 SwiftUI 画的内容整个盖住。
+    /// 正确做法是加到 `contentView.superview`（`NSThemeFrame`）里、`contentView` 之下。
     @MainActor
     private func installVisualEffectView(in window: NSWindow) {
         guard let contentView = window.contentView else { return }
@@ -128,22 +130,20 @@ struct WindowConfigurator: NSViewRepresentable {
         // 宿主视图不能自己画不透明底色，否则会盖住底层材质。
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
-        for subview in contentView.subviews where !(subview is NSVisualEffectView) {
-            subview.wantsLayer = true
-            subview.layer?.backgroundColor = NSColor.clear.cgColor
-        }
+
+        let host = contentView.superview ?? contentView
+        let frameInHost = contentView.convert(contentView.bounds, to: host)
 
         // 幂等：重复进入 `updateNSView` 时复用已安装的材质视图。
-        // contentView 是 `NSHostingView`，它不参与 Auto Layout 的子视图布局，
-        // 约束会把材质视图留在 0×0（表现为整窗全透明），所以用 frame + autoresizing。
+        // 不用 Auto Layout：宿主视图不参与其子视图的约束布局，约束会留下 0×0。
         let effectView: NSVisualEffectView
-        if let existing = contentView.subviews.compactMap({ $0 as? NSVisualEffectView }).first {
+        if let existing = host.subviews.compactMap({ $0 as? NSVisualEffectView }).first {
             effectView = existing
-            effectView.frame = contentView.bounds
         } else {
-            effectView = NSVisualEffectView(frame: contentView.bounds)
-            contentView.addSubview(effectView, positioned: .below, relativeTo: nil)
+            effectView = NSVisualEffectView(frame: frameInHost)
+            host.addSubview(effectView, positioned: .below, relativeTo: contentView)
         }
+        effectView.frame = frameInHost
         effectView.autoresizingMask = [.width, .height]
 
         effectView.material = .hudWindow
@@ -151,6 +151,8 @@ struct WindowConfigurator: NSViewRepresentable {
         effectView.blendingMode = .behindWindow
         // `.active` 固定渲染；`followsWindowActiveState` 在应用非前台时会退化。
         effectView.state = .active
+        // 用户实拖校准值：再低就太透，1.0 偏实。
+        effectView.alphaValue = 0.99
         // 材质视图自己裁圆角，透明窗口下才能露出圆角。
         effectView.wantsLayer = true
         effectView.layer?.cornerRadius = 14
