@@ -53,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isTerminating = true
 
         Task { @MainActor in
+            // 收尾期间 closeSession 会把状态切回 idle，窗口会闪一下设置界面；
+            // 先隐藏窗口再执行收尾。
+            for window in NSApp.windows where window.isVisible {
+                window.orderOut(nil)
+            }
             await model.closeSession()
             NSApp.reply(toApplicationShouldTerminate: true)
         }
