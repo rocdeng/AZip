@@ -49,9 +49,11 @@ ditto "$APP" "$DEST"
 
 # build 目录与 DerivedData 里的产物不参与「打开方式」，只保留 /Applications 的正式版。
 if [ -x "$LSREGISTER" ]; then
-    "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
-    for derived in "$HOME"/Library/Developer/Xcode/DerivedData/AZip-*/Build/Products/*/AZip.app; do
-        [ -d "$derived" ] && "$LSREGISTER" -u "$derived" >/dev/null 2>&1 || true
+    for candidate in \
+        "build/Build/Products/Debug/AZip.app" \
+        "build/Build/Products/Release/AZip.app" \
+        "$HOME"/Library/Developer/Xcode/DerivedData/AZip-*/Build/Products/*/AZip.app; do
+        [ -d "$candidate" ] && "$LSREGISTER" -u "$candidate" >/dev/null 2>&1 || true
     done
     "$LSREGISTER" -f "$DEST" >/dev/null 2>&1 || true
 fi
