@@ -102,6 +102,11 @@ struct AssociationSettingsPane: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
+                Button("全部关联") {
+                    associateAll()
+                }
+                .controlSize(.small)
+
                 Button("全部恢复为系统默认") {
                     restoreAll()
                 }
@@ -159,6 +164,21 @@ struct AssociationSettingsPane: View {
             updated[type.id] = FileAssociationService.isDefault(bundleID: bundleID, for: type)
         }
         states = updated
+    }
+
+    private func associateAll() {
+        var failures: [String] = []
+        for type in FileAssociationService.supportedTypes {
+            do {
+                try FileAssociationService.setDefault(bundleID: bundleID, for: type)
+            } catch {
+                failures.append(type.label)
+            }
+        }
+        message = failures.isEmpty
+            ? "已全部关联到 AZip"
+            : "以下格式关联失败：\(failures.joined(separator: "、"))"
+        refresh()
     }
 
     private func restoreAll() {
