@@ -32,8 +32,12 @@ struct RootWindow: View {
         .background(
             WindowConfigurator(
                 title: windowTitle,
+                hidesWindowChrome: archive.job != nil,
                 onWindowReady: { window in
-                    if isIdle {
+                    if archive.job != nil {
+                        window.setContentSize(NSSize(width: 420, height: 240))
+                        window.center()
+                    } else if isIdle {
                         window.setContentSize(NSSize(width: 520, height: 600))
                         window.center()
                     } else {
@@ -56,7 +60,10 @@ struct RootWindow: View {
                 }
             )
         )
-        .frame(minWidth: 480, minHeight: 320)
+        .frame(
+            minWidth: archive.job == nil ? 480 : 360,
+            minHeight: archive.job == nil ? 320 : 200
+        )
         .background { navigationShortcuts }
         .overlay(alignment: .top) {
             if let banner = model.banner {
@@ -69,6 +76,13 @@ struct RootWindow: View {
                     .padding(.top, 52)
                     .onTapGesture { model.banner = nil }
             }
+        }
+        .onChange(of: archive.job?.id) { _, _ in
+            // 解压浮窗用小尺寸，结束后回到设置页尺寸。
+            let size = archive.job == nil
+                ? NSSize(width: 520, height: 600)
+                : NSSize(width: 420, height: 240)
+            resizeMainWindow(size)
         }
         .onAppear {
             // 注册设置窗口入口；直接启动时由 AppDelegate 触发。
@@ -109,6 +123,16 @@ struct RootWindow: View {
         .sheet(isPresented: $model.showAssociationSheet) {
             AssociationSheet()
         }
+    }
+
+    private func resizeMainWindow(_ size: NSSize) {
+        guard let window = NSApp.windows.first(
+            where: { $0.identifier?.rawValue == "AZipMainWindow" }
+        ) ?? NSApp.windows.first(where: { $0.canBecomeMain && !($0 is NSPanel) }) else {
+            return
+        }
+        window.setContentSize(size)
+        window.center()
     }
 
     private var isIdle: Bool {

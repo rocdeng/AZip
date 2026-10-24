@@ -81,6 +81,7 @@ final class ArchiveSession: ObservableObject {
                 current.progress = 1
                 current.phase = .finished(destination)
                 job = current
+                scheduleAutoDismiss(after: 1.2) { if case .finished = $0 { return true }; return false }
 
                 // 用户显式勾选「解压后删除压缩包」时才动原文件，
                 // 且只移到废纸篓（可恢复），不做不可逆删除。
@@ -95,6 +96,7 @@ final class ArchiveSession: ObservableObject {
                 guard var current = job else { return }
                 if case ArchiveError.cancelled = error {
                     current.phase = .cancelled
+                    scheduleAutoDismiss(after: 0.6) { if case .cancelled = $0 { return true }; return false }
                 } else {
                     current.phase = .failed(error.localizedDescription)
                 }
@@ -105,6 +107,18 @@ final class ArchiveSession: ObservableObject {
 
     func cancel() {
         cancelFlag.set()
+    }
+
+    /// 完成/取消后自动关闭浮窗；失败保留，让用户看到原因。
+    private func scheduleAutoDismiss(
+        after seconds: Double,
+        matches: @escaping (ExtractionJob.Phase) -> Bool
+    ) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard let current = job, matches(current.phase) else { return }
+            job = nil
+        }
     }
 
     func dismiss() {

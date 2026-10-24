@@ -32,9 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // 单窗口语义：关掉最后一个窗口就退出。若有挂载或收尾在进行，
-        // applicationShouldTerminate 会等它们结束再回复系统。
-        true
+        // 不随窗口关闭自动退出：解压完成回到设置页、或用户暂时关窗时，
+        // 进程保留在 Dock 里，下次双击文件可直接复用。⌘Q 仍走正常退出流程。
+        false
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

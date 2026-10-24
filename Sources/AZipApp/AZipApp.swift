@@ -6,9 +6,9 @@ struct AZipApp: App {
     @StateObject private var model = DMGSessionModel.shared
 
     var body: some Scene {
-        // 用 `WindowGroup` 保证启动时一定有窗口；同时移除「新建窗口」命令，
-        // 避免两个窗口共享同一个 `DMGSessionModel.shared` 而互相卸载卷。
-        WindowGroup("AZip") {
+        // 单例窗口：`WindowGroup` 会实例化多个窗口，而它们共享同一个
+        // `DMGSessionModel.shared`，关掉任一个都会卸载别的窗口正在用的卷。
+        Window("AZip", id: "main") {
             RootWindow(model: model)
         }
         .windowStyle(.hiddenTitleBar)

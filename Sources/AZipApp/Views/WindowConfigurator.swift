@@ -4,6 +4,8 @@ import SwiftUI
 struct WindowConfigurator: NSViewRepresentable {
     /// 显示在标题栏的文本，例如 "AZip - multiChat 1.4.7.dmg"。
     var title: String = "AZip"
+    /// 解压进度等紧凑浮窗：隐藏标题文字与红绿灯，只留内容。
+    var hidesWindowChrome: Bool = false
     /// 窗口就绪后的回调，用于应用会话在窗口出现前排队的尺寸。
     var onWindowReady: (@MainActor (NSWindow) -> Void)?
     /// 真实窗口关闭时的回调。SwiftUI 的 `onDisappear` 在启动时会被误触发，不能用于卸载卷。
@@ -75,7 +77,10 @@ struct WindowConfigurator: NSViewRepresentable {
     @MainActor
     private func configure(_ window: NSWindow?, coordinator: Coordinator) {
         guard let window else { return }
-        window.titleVisibility = .visible
+        window.titleVisibility = hidesWindowChrome ? .hidden : .visible
+        for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(type)?.isHidden = hidesWindowChrome
+        }
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
         // 透明窗口 + 铺满 contentView 的 behindWindow 材质：模糊由窗口服务器采样合成，
@@ -84,7 +89,9 @@ struct WindowConfigurator: NSViewRepresentable {
         window.backgroundColor = .clear
         window.isMovableByWindowBackground = true
         window.hasShadow = true
-        window.minSize = NSSize(width: 480, height: 320)
+        window.minSize = hidesWindowChrome
+            ? NSSize(width: 360, height: 200)
+            : NSSize(width: 480, height: 320)
         window.identifier = NSUserInterfaceItemIdentifier("AZipMainWindow")
 
         installVisualEffectView(in: window)
