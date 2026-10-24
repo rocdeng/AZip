@@ -34,7 +34,7 @@ struct RootWindow: View {
                 title: windowTitle,
                 onWindowReady: { window in
                     if isIdle {
-                        window.setContentSize(NSSize(width: 520, height: 620))
+                        window.setContentSize(NSSize(width: 520, height: 600))
                         window.center()
                     } else {
                         model.applyPendingWindowSize(to: window)

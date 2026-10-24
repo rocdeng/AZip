@@ -81,6 +81,16 @@ final class ArchiveSession: ObservableObject {
                 current.progress = 1
                 current.phase = .finished(destination)
                 job = current
+
+                // 用户显式勾选「解压后删除压缩包」时才动原文件，
+                // 且只移到废纸篓（可恢复），不做不可逆删除。
+                if UserDefaults.standard.bool(forKey: "deleteArchiveAfterExtraction") {
+                    var trashed: NSURL?
+                    try? FileManager.default.trashItem(
+                        at: url,
+                        resultingItemURL: &trashed
+                    )
+                }
             } catch {
                 guard var current = job else { return }
                 if case ArchiveError.cancelled = error {

@@ -6,7 +6,7 @@ import SwiftUI
 struct SettingsView: View {
     var body: some View {
         AssociationSettingsPane()
-            .frame(width: 520, height: 620)
+            .frame(width: 520, height: 600)
     }
 }
 
@@ -14,6 +14,7 @@ struct AssociationSettingsPane: View {
     @State private var states: [String: Bool] = [:]
     @State private var message: String?
     @State private var showsAbout = false
+    @AppStorage("deleteArchiveAfterExtraction") private var deleteArchiveAfterExtraction = false
 
     private var bundleID: String {
         Bundle.main.bundleIdentifier ?? "com.dengpeng.AZip"
@@ -24,8 +25,8 @@ struct AssociationSettingsPane: View {
             Text("文件关联")
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 22)
-                .padding(.top, 42)
-                .padding(.bottom, 10)
+                .padding(.top, 26)
+                .padding(.bottom, 8)
 
             ScrollView {
                 VStack(spacing: 0) {
@@ -52,6 +53,8 @@ struct AssociationSettingsPane: View {
                 .padding(.horizontal, 18)
             }
             .scrollIndicators(.never)
+
+            optionRow
 
             footer
         }
@@ -98,6 +101,42 @@ struct AssociationSettingsPane: View {
         .padding(.vertical, 8)
     }
 
+    private var optionRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "trash")
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("解压后删除压缩包")
+                    .font(.system(size: 12))
+                Text("把原压缩包移到废纸篓（可恢复）")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $deleteArchiveAfterExtraction)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+        )
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+    }
+
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("勾选后，双击对应文件将由 AZip 打开。压缩格式的打开与解压功能将在后续版本提供。")
@@ -132,8 +171,8 @@ struct AssociationSettingsPane: View {
             }
         }
         .padding(.horizontal, 22)
-        .padding(.top, 12)
-        .padding(.bottom, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
     }
 
     private func symbolName(for type: FileTypeAssociation) -> String {
