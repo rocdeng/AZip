@@ -477,6 +477,15 @@ final class DMGSessionModel: ObservableObject {
         if case .installing = state { return }
         pendingConflict = nil
 
+        // 先做冲突检查：有同名应用时直接弹确认框，
+        // 不要先隐藏主窗口显示进度浮窗再退回来，那样界面会闪一下。
+        let targetURL = URL(fileURLWithPath: "/Applications")
+            .appendingPathComponent(appURL.lastPathComponent)
+        if !overwrite, FileManager.default.fileExists(atPath: targetURL.path) {
+            pendingConflict = ConflictRequest(appURL: appURL)
+            return
+        }
+
         let token = sessionToken
         let mountedVolume = mount
         isInstallInFlight = true
