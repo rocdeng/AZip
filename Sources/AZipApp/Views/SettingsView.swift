@@ -13,6 +13,7 @@ struct SettingsView: View {
 struct AssociationSettingsPane: View {
     @State private var states: [String: Bool] = [:]
     @State private var message: String?
+    @State private var showsAbout = false
 
     private var bundleID: String {
         Bundle.main.bundleIdentifier ?? "com.dengpeng.AZip"
@@ -55,6 +56,9 @@ struct AssociationSettingsPane: View {
             footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .sheet(isPresented: $showsAbout) {
+            AboutView()
+        }
         .onAppear(perform: refresh)
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -109,6 +113,11 @@ struct AssociationSettingsPane: View {
 
                 Button("全部恢复为系统默认") {
                     restoreAll()
+                }
+                .controlSize(.small)
+
+                Button("关于 AZip") {
+                    showsAbout = true
                 }
                 .controlSize(.small)
 

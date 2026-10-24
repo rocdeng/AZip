@@ -21,20 +21,39 @@ public enum ArchiveError: LocalizedError, Sendable {
 }
 
 public enum ArchiveExtractor {
-    /// 与 `ditto` 一起使用时保留资源分支与扩展属性。
-    private static let ditto = "/usr/bin/ditto"
+    /// 系统自带的 libarchive 前端，覆盖 zip / tar / gz / bz2 / xz / 7z / rar / iso 等。
+    private static let bsdtar = "/usr/bin/bsdtar"
 
-    /// 解压 zip 到 `destination`（必须是尚不存在的目录）。
+    /// 可交给 `bsdtar` 处理的扩展名。
+    public static let supportedExtensions: Set<String> = [
+        "zip", "tar", "gz", "tgz", "bz2", "tbz", "tbz2",
+        "xz", "txz", "7z", "rar", "iso", "zst", "lz4"
+    ]
+
+    /// 复合扩展名按长度从长到短匹配，避免 `.tar.gz` 被当成 `.gz`。
+    private static let knownSuffixes = [
+        ".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst",
+        ".tgz", ".tbz2", ".tbz", ".txz",
+        ".zip", ".7z", ".rar", ".iso", ".zst", ".lz4",
+        ".gz", ".bz2", ".xz", ".tar"
+    ]
+
+    public static func isSupported(_ url: URL) -> Bool {
+        supportedExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    /// 解压到 `destination`（必须是尚不存在的目录）。
     ///
-    /// 进度按“目标目录已写入字节 / 压缩包解压后总字节”估算，每 180 ms 采样一次。
+    /// 进度按「目标目录已生成条目数 / 归档内条目总数」估算，每 180 ms 采样一次。
     public static func extract(
-        zipURL: URL,
+        archiveURL: URL,
         to destination: URL,
         progress: @escaping @Sendable (Double) -> Void,
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) async throws {
-        guard zipURL.pathExtension.lowercased() == "zip" else {
-            throw ArchiveError.unsupportedFormat(zipURL.pathExtension.lowercased())
+        let ext = archiveURL.pathExtension.lowercased()
+        guard supportedExtensions.contains(ext) else {
+            throw ArchiveError.unsupportedFormat(ext)
         }
 
         let parent = destination.deletingLastPathComponent()
@@ -51,11 +70,15 @@ public enum ArchiveExtractor {
             throw ArchiveError.destinationNotWritable(parent)
         }
 
-        let total = uncompressedSize(of: zipURL)
+        let totalEntries = countEntries(inArchive: archiveURL)
 
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: ditto)
-        process.arguments = ["-x", "-k", "--rsrc", zipURL.path, destination.path]
+        process.executableURL = URL(fileURLWithPath: bsdtar)
+        process.arguments = [
+            "-xf", archiveURL.path,
+            "-C", destination.path,
+            "--no-same-owner"
+        ]
         let errorPipe = Pipe()
         process.standardError = errorPipe
         process.standardOutput = FileHandle.nullDevice
@@ -72,9 +95,9 @@ public enum ArchiveExtractor {
                 process.waitUntilExit()
                 throw ArchiveError.cancelled
             }
-            if total > 0 {
-                let written = directorySize(destination)
-                progress(min(0.99, Double(written) / Double(total)))
+            if totalEntries > 0 {
+                let done = countFileSystemEntries(in: destination)
+                progress(min(0.99, Double(done) / Double(totalEntries)))
             }
             try? await Task.sleep(for: .milliseconds(180))
         }
@@ -85,16 +108,16 @@ public enum ArchiveExtractor {
 
         guard process.terminationStatus == 0 else {
             throw ArchiveError.toolFailed(
-                errorText.isEmpty ? "ditto 退出码 \(process.terminationStatus)" : errorText
+                errorText.isEmpty ? "bsdtar 退出码 \(process.terminationStatus)" : errorText
             )
         }
         progress(1.0)
     }
 
-    /// 解压目标的默认位置：与压缩包同目录、同名文件夹；重名时追加序号。
-    public static func defaultDestination(for zipURL: URL) -> URL {
-        let parent = zipURL.deletingLastPathComponent()
-        let base = zipURL.deletingPathExtension().lastPathComponent
+    /// 默认解压位置：与归档同目录、同名文件夹；重名时追加序号。
+    public static func defaultDestination(for archiveURL: URL) -> URL {
+        let parent = archiveURL.deletingLastPathComponent()
+        let base = baseName(for: archiveURL)
         let candidate = parent.appendingPathComponent(base)
         guard FileManager.default.fileExists(atPath: candidate.path) else {
             return candidate
@@ -108,20 +131,39 @@ public enum ArchiveExtractor {
         return parent.appendingPathComponent("\(base) \(UUID().uuidString.prefix(6))")
     }
 
+    public static func baseName(for archiveURL: URL) -> String {
+        let name = archiveURL.lastPathComponent
+        let lowercased = name.lowercased()
+        for suffix in knownSuffixes where lowercased.hasSuffix(suffix) {
+            let trimmed = String(name.dropLast(suffix.count))
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return archiveURL.deletingPathExtension().lastPathComponent
+    }
+
     // MARK: - Helpers
 
-    private static func uncompressedSize(of zipURL: URL) -> Int64 {
-        guard let output = try? runAndCapture("/usr/bin/unzip", ["-l", zipURL.path]) else {
+    private static func countEntries(inArchive url: URL) -> Int {
+        guard let output = try? runAndCapture("/usr/bin/bsdtar", ["-tf", url.path]) else {
             return 0
         }
-        // `unzip -l` 末尾形如：` 12345678                     12 files`
-        for line in output.split(separator: "\n").reversed() {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard trimmed.contains("file") else { continue }
-            let digits = trimmed.prefix { $0.isNumber }
-            if let value = Int64(digits) { return value }
+        return output.split(separator: "\n", omittingEmptySubsequences: true).count
+    }
+
+    private static func countFileSystemEntries(in url: URL) -> Int {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: nil,
+            options: [],
+            errorHandler: { _, _ in true }
+        ) else {
+            return 0
         }
-        return 0
+        var count = 0
+        for case _ as URL in enumerator {
+            count += 1
+        }
+        return count
     }
 
     private static func runAndCapture(_ executable: String, _ arguments: [String]) throws -> String {
@@ -135,23 +177,5 @@ public enum ArchiveExtractor {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return String(decoding: data, as: UTF8.self)
-    }
-
-    private static func directorySize(_ url: URL) -> Int64 {
-        let keys: [URLResourceKey] = [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: keys,
-            options: [],
-            errorHandler: { _, _ in true }
-        ) else {
-            return 0
-        }
-        var total: Int64 = 0
-        for case let item as URL in enumerator {
-            let values = try? item.resourceValues(forKeys: Set(keys))
-            total += Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? 0)
-        }
-        return total
     }
 }

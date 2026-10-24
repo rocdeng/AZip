@@ -51,8 +51,8 @@ final class ArchiveSession: ObservableObject {
 
     private let cancelFlag = CancelFlag()
 
-    /// 支持自动解压的扩展名。
-    static let supportedExtensions: Set<String> = ["zip"]
+    /// 支持自动解压的扩展名（与 Core 的解压器保持一致）。
+    static var supportedExtensions: Set<String> { ArchiveExtractor.supportedExtensions }
 
     func extract(url: URL) {
         guard job == nil else { return }
@@ -64,7 +64,7 @@ final class ArchiveSession: ObservableObject {
         Task {
             do {
                 try await ArchiveExtractor.extract(
-                    zipURL: url,
+                    archiveURL: url,
                     to: destination,
                     progress: { value in
                         Task { @MainActor in
