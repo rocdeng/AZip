@@ -503,6 +503,8 @@ final class DMGSessionModel: ObservableObject {
         updateInstallPanel(appURL: appURL, progress: 0, finished: false)
         let mainWindow = NSApp.windows.first {
             $0.identifier?.rawValue == "AZipMainWindow"
+        } ?? NSApp.windows.first {
+            $0.canBecomeMain && !($0 is NSPanel) && !$0.isSheet
         }
         ExtractionWindowController.shared.show(over: mainWindow)
 

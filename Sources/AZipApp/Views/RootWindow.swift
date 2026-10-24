@@ -252,9 +252,10 @@ struct RootWindow: View {
             } else {
                 GridContentView(entries: entries, onOpen: model.enter)
             }
-        case .installing(_, let progress):
-            ProgressView(NSLocalizedString("正在安装…", comment: ""), value: progress)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .installing:
+            // 安装进度由独立浮窗展示；主窗口保持空白且会主动隐藏，
+            // 这里不再渲染那条临时的大进度条。
+            Color.clear
         case .failed(let message):
             placeholder(message)
         }
