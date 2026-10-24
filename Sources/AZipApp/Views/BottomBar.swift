@@ -21,9 +21,7 @@ struct BottomBar: View {
             }
 
             Button {
-                if let first = model.rootApplications.first {
-                    model.requestInstall(first)
-                }
+                model.requestInstallFromBar()
             } label: {
                 label
             }

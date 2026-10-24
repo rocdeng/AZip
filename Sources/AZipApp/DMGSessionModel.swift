@@ -348,7 +348,8 @@ final class DMGSessionModel: ObservableObject {
             let token = sessionToken
             Task { await performEnter(entry.url, token: token) }
         case .application:
-            requestInstall(entry)
+            // 双击具体应用就直接装它，不再弹选择面板。
+            startInstall(entry.url, overwrite: false)
         case .file:
             // DMG 里嵌套的磁盘映像：直接用本应用接力打开。
             if entry.url.pathExtension.lowercased() == "dmg" {
@@ -454,13 +455,14 @@ final class DMGSessionModel: ObservableObject {
 
     // MARK: - Install
 
-    func requestInstall(_ app: VolumeEntry) {
+    /// 底部按钮触发：只有一个应用时直接装，多个时让用户选。
+    func requestInstallFromBar() {
         guard !isInstallInFlight else { return }
         let candidates = rootApplications
         if candidates.count > 1 {
             pendingApps = AppSelection(entries: candidates)
-        } else {
-            startInstall(app.url, overwrite: false)
+        } else if let first = candidates.first {
+            startInstall(first.url, overwrite: false)
         }
     }
 
