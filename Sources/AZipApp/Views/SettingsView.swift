@@ -6,7 +6,7 @@ import SwiftUI
 struct SettingsView: View {
     var body: some View {
         AssociationSettingsPane()
-            .frame(width: 460, height: 430)
+            .frame(width: 520, height: 620)
     }
 }
 
@@ -19,43 +19,42 @@ struct AssociationSettingsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Form {
-                Section("文件关联") {
-                    ForEach(FileAssociationService.supportedTypes) { type in
-                        Toggle(isOn: binding(for: type)) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(type.label)
-                                Text(type.fileExtensions.map { ".\($0)" }.joined(separator: "  "))
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.secondary)
-                            }
+        VStack(alignment: .leading, spacing: 0) {
+            Text("文件关联")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 22)
+                .padding(.top, 42)
+                .padding(.bottom, 10)
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(
+                        Array(FileAssociationService.supportedTypes.enumerated()),
+                        id: \.element.id
+                    ) { index, type in
+                        row(for: type)
+                        if index < FileAssociationService.supportedTypes.count - 1 {
+                            Divider()
+                                .opacity(0.12)
+                                .padding(.leading, 54)
                         }
-                        .toggleStyle(.switch)
                     }
                 }
-
-                Section {
-                    Text("勾选后，双击对应文件将由 AZip 打开。压缩格式的打开与解压功能将在后续版本提供。")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Button("全部恢复为系统默认") {
-                        restoreAll()
-                    }
-                }
-
-                if let message {
-                    Section {
-                        Text(message)
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                )
+                .padding(.horizontal, 18)
             }
-            .formStyle(.grouped)
+            .scrollIndicators(.never)
+
+            footer
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onAppear(perform: refresh)
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -66,6 +65,68 @@ struct AssociationSettingsPane: View {
             NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
         ) { _ in
             refresh()
+        }
+    }
+
+    private func row(for type: FileTypeAssociation) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbolName(for: type))
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(type.label)
+                    .font(.system(size: 12))
+                Text(type.fileExtensions.map { ".\($0)" }.joined(separator: "  "))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: binding(for: type))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("勾选后，双击对应文件将由 AZip 打开。压缩格式的打开与解压功能将在后续版本提供。")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Button("全部恢复为系统默认") {
+                    restoreAll()
+                }
+                .controlSize(.small)
+
+                if let message {
+                    Text(message)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 12)
+        .padding(.bottom, 20)
+    }
+
+    private func symbolName(for type: FileTypeAssociation) -> String {
+        switch type.id {
+        case "com.apple.disk-image-udif": return "opticaldisc"
+        case "public.zip-archive": return "doc.zipper"
+        case "public.tar-archive", "org.gnu.gnu-zip-tar-archive": return "shippingbox"
+        default: return "archivebox"
         }
     }
 

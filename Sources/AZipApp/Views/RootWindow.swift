@@ -16,11 +16,15 @@ struct RootWindow: View {
                 ExtractView(session: archive, job: job)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // 内容与底部安装栏上下排布：按钮占独立一条，不叠在 DMG 内容上。
-                VStack(spacing: 0) {
+                if isIdle {
                     content
-                        .padding(.top, DMGSessionModel.titleBarInset)
-                    BottomBar(model: model)
+                } else {
+                    // 内容与底部安装栏上下排布：按钮占独立一条，不叠在 DMG 内容上。
+                    VStack(spacing: 0) {
+                        content
+                            .padding(.top, DMGSessionModel.titleBarInset)
+                        BottomBar(model: model)
+                    }
                 }
             }
         }
@@ -29,7 +33,12 @@ struct RootWindow: View {
             WindowConfigurator(
                 title: windowTitle,
                 onWindowReady: { window in
-                    model.applyPendingWindowSize(to: window)
+                    if isIdle {
+                        window.setContentSize(NSSize(width: 520, height: 620))
+                        window.center()
+                    } else {
+                        model.applyPendingWindowSize(to: window)
+                    }
                 },
                 onWindowClose: {
                     // `closeSession` 是 async：关窗时在任务里等待卸载完成（对应 spec 7.3）。
@@ -100,6 +109,11 @@ struct RootWindow: View {
         .sheet(isPresented: $model.showAssociationSheet) {
             AssociationSheet()
         }
+    }
+
+    private var isIdle: Bool {
+        if case .idle = model.state { return true }
+        return false
     }
 
     /// 接收拖入的 `.dmg`：只处理第一个合法磁盘映像。
