@@ -23,7 +23,11 @@ struct RootWindow: View {
                     VStack(spacing: 0) {
                         content
                             .padding(.top, DMGSessionModel.titleBarInset)
+                            // DMG 背景图可能比窗口高，必须让内容区让出空间，
+                            // 否则会把底部安装栏挤出窗口。
+                            .frame(maxHeight: .infinity)
                         BottomBar(model: model)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
