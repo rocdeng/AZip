@@ -13,7 +13,16 @@ final class ExtractionWindowController {
     private let panelSize = NSSize(width: 380, height: 84)
 
     func show(over windowToHide: NSWindow? = nil) {
-        windowToHide?.orderOut(nil)
+        if let windowToHide {
+            windowToHide.orderOut(nil)
+        }
+        // 兜底：把任何带标题栏的主窗口都收起，避免主界面和浮窗同时出现。
+        for window in NSApp.windows
+        where window.styleMask.contains(.titled)
+            && window.canBecomeMain
+            && !window.isSheet {
+            window.orderOut(nil)
+        }
 
         if let panel {
             panel.makeKeyAndOrderFront(nil)
