@@ -44,6 +44,9 @@ final class DMGSessionModel: ObservableObject {
 
     @Published private(set) var state: SessionState = .idle
 
+    /// 从挂载卷内复制出来的临时 dmg，收尾时删除（仅限本应用创建的文件）。
+    private var nestedTemporaryDMG: URL?
+
     @Published private(set) var mount: MountResult?
     @Published private(set) var dmgName: String = "AZip"
     @Published private(set) var navigationStack: [URL] = []
@@ -200,8 +203,22 @@ final class DMGSessionModel: ObservableObject {
         openTaskID = nil
     }
 
-    private func performOpen(_ dmgURL: URL, token: UUID) async {
+    private func performOpen(_ initialURL: URL, token: UUID) async {
         guard token == sessionToken else { return }
+
+        // 如果 dmg 位于当前挂载卷内（嵌套映像），必须先复制到临时目录：
+        // 后面会卸载源卷，原路径随即失效。
+        var dmgURL = initialURL
+        if let current = mount,
+           initialURL.path.hasPrefix(current.mountPoint.path + "/") {
+            let temp = FileManager.default.temporaryDirectory.appendingPathComponent(
+                "azip-nested-\(UUID().uuidString).dmg"
+            )
+            if (try? FileManager.default.copyItem(at: initialURL, to: temp)) != nil {
+                dmgURL = temp
+                nestedTemporaryDMG = temp
+            }
+        }
 
         // 上次打开时未能退出的卷：先重试一次，成功则不再保留。
         if !orphanedMounts.isEmpty {
@@ -316,7 +333,14 @@ final class DMGSessionModel: ObservableObject {
             Task { await performEnter(entry.url, token: token) }
         case .application:
             requestInstall(entry)
-        case .file, .symbolicLink:
+        case .file:
+            // DMG 里嵌套的磁盘映像：直接用本应用接力打开。
+            if entry.url.pathExtension.lowercased() == "dmg" {
+                open(dmgURL: entry.url)
+            } else {
+                NSWorkspace.shared.open(entry.url)
+            }
+        case .symbolicLink:
             NSWorkspace.shared.open(entry.url)
         }
     }
@@ -498,6 +522,7 @@ final class DMGSessionModel: ObservableObject {
     /// 关闭当前会话：重置全部会话状态并退出本次会话挂载的卷。
     /// 由应用层在窗口关闭 / 进程终止时 `await` 调用。
     func closeSession() async {
+        defer { removeNestedTemporaryCopy() }
         // 安装期间关闭会话会中断 ditto 并从源卷卸载，留下暂存残片。
         // 调用方已有守卫，这里再兜底一次，防止新的调用路径绕过检查。
         guard !isInstallInFlight else {
@@ -672,6 +697,13 @@ final class DMGSessionModel: ObservableObject {
         pendingWindowSize = nil
         window.setContentSize(windowContentSize(for: size))
         window.center()
+    }
+
+    /// 清掉为打开嵌套 dmg 而生成的临时副本。
+    private func removeNestedTemporaryCopy() {
+        guard let url = nestedTemporaryDMG else { return }
+        nestedTemporaryDMG = nil
+        try? FileManager.default.removeItem(at: url)
     }
 
     private func describe(_ error: Error) -> String {

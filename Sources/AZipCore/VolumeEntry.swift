@@ -45,6 +45,7 @@ public enum VolumeScanner {
     public static func scan(directory: URL) throws -> [VolumeEntry] {
         let keys: [URLResourceKey] = [
             .isDirectoryKey,
+            .isPackageKey,
             .isSymbolicLinkKey,
             .isHiddenKey,
             .fileAllocatedSizeKey,
@@ -78,9 +79,18 @@ public enum VolumeScanner {
             }
 
             let isDirectory = values?.isDirectory ?? false
+            let isPackage = values?.isPackage ?? false
             let kind: VolumeEntry.Kind
             if isDirectory {
-                kind = url.pathExtension.lowercased() == "app" ? .application : .folder
+                if url.pathExtension.lowercased() == "app" {
+                    kind = .application
+                } else if isPackage {
+                    // `.rtfd`、`.bundle`、`.pkg` 等包本质是目录，但对用户是一个文件：
+                    // 双击应交给默认程序，而不是钻进包内部。
+                    kind = .file
+                } else {
+                    kind = .folder
+                }
             } else {
                 kind = .file
             }
