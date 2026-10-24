@@ -1,9 +1,8 @@
+import AppKit
 import AZipCore
 import SwiftUI
 
 struct SettingsView: View {
-    @AppStorage("didOfferFileAssociation") private var didOffer = false
-
     @State private var isDefault = false
     @State private var message: String?
 
@@ -29,8 +28,8 @@ struct SettingsView: View {
                         restore()
                     }
                     Button("重新显示关联提示") {
-                        didOffer = false
-                        message = "下次启动时会再次提示"
+                        DMGSessionModel.shared.presentAssociationPrompt()
+                        message = "已显示关联提示"
                     }
                 }
 
@@ -44,6 +43,13 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 440, height: 200)
         .onAppear(perform: refresh)
+        // 在访达里改了关联后，设置页保持打开也能刷新；onReceive 随视图消失自动取消订阅。
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refresh()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            refresh()
+        }
     }
 
     private func refresh() {
@@ -63,7 +69,7 @@ struct SettingsView: View {
     private func restore() {
         do {
             try FileAssociationService.restoreSystemDefault()
-            message = "已恢复系统默认"
+            message = "已将 .dmg 恢复为系统默认打开方式"
         } catch {
             message = "恢复失败：\(error)"
         }

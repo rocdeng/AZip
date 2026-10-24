@@ -65,14 +65,16 @@ struct AssociationSheet: View {
     }
 
     private func apply() {
-        didOffer = true
         guard isChecked else {
+            didOffer = true
             dismiss()
             return
         }
         let bundleID = Bundle.main.bundleIdentifier ?? "com.dengpeng.AZip"
         do {
             try FileAssociationService.setDefault(bundleID: bundleID)
+            // 只有真正设置成功才落盘；失败时保留原标记，用户可以再次尝试。
+            didOffer = true
             dismiss()
         } catch {
             errorText = "设置失败：\(error)"

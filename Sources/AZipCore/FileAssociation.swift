@@ -1,8 +1,15 @@
 import CoreServices
 import Foundation
 
-public enum FileAssociationError: Error, Sendable {
+public enum FileAssociationError: LocalizedError, Sendable {
     case setFailed(uti: String, status: OSStatus)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .setFailed(uti, status):
+            return "无法将 \(uti) 设为默认打开方式（错误码 \(status)）"
+        }
+    }
 }
 
 public enum FileAssociationService {

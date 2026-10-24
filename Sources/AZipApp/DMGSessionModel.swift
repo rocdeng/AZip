@@ -112,6 +112,13 @@ final class DMGSessionModel: ObservableObject {
         guard !associationPromptShown else { return }
         associationPromptShown = true
         guard !UserDefaults.standard.bool(forKey: "didOfferFileAssociation") else { return }
+        presentAssociationPrompt()
+    }
+
+    /// 设置页「重新显示关联提示」：立即弹出面板，无需重启应用。
+    /// 展示即视为已询问过，保持 `didOfferFileAssociation` 的既有语义。
+    func presentAssociationPrompt() {
+        associationPromptShown = true
         // 在弹出面板之前就落盘，避免面板展示期间应用退出后重复弹出。
         UserDefaults.standard.set(true, forKey: "didOfferFileAssociation")
         showAssociationSheet = true
