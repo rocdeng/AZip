@@ -69,17 +69,41 @@ public struct DMGWindowLayout: Sendable {
             return url
         }
 
-        guard let backgroundDirectory = backgroundDirectory(for: mountPoint),
-              let entries = try? FileManager.default.contentsOfDirectory(
-                  at: backgroundDirectory,
-                  includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]
-              ) else {
-            return nil
+        // 后备 1：`.background/` 目录里的图片。
+        if let backgroundDirectory = backgroundDirectory(for: mountPoint),
+           let entries = try? FileManager.default.contentsOfDirectory(
+               at: backgroundDirectory,
+               includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+           ) {
+            let candidates = entries
+                .filter { hasImageExtension($0.lastPathComponent) }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            if let found = candidates.first(where: {
+                isValidBackgroundFile($0, mountPoint: mountPoint)
+            }) {
+                return found
+            }
         }
-        return entries
-            .filter { hasImageExtension($0.lastPathComponent) }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-            .first { isValidBackgroundFile($0, mountPoint: mountPoint) }
+
+        // 后备 2：背景图直接放在根目录的 DMG（如 `.background.tiff`，WorkBuddy 就是这种）。
+        if let rootEntries = try? FileManager.default.contentsOfDirectory(
+            at: mountPoint,
+            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+        ) {
+            let candidates = rootEntries
+                .filter {
+                    $0.lastPathComponent.lowercased().hasPrefix(".background")
+                        && hasImageExtension($0.lastPathComponent)
+                }
+                .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            if let found = candidates.first(where: {
+                isValidBackgroundFile($0, mountPoint: mountPoint)
+            }) {
+                return found
+            }
+        }
+
+        return nil
     }
 
     /// 只接受带图片扩展名的纯文件名，拒绝任何路径分隔或上跳片段。
