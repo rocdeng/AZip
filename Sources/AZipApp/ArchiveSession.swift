@@ -58,8 +58,16 @@ final class ArchiveSession: ObservableObject {
 
     func extract(url: URL) {
         guard job == nil else {
-            if !pendingURLs.contains(url) { pendingURLs.append(url) }
+            if !pendingURLs.contains(url) {
+                pendingURLs.append(url)
+                totalCount += 1
+            }
             return
+        }
+        // 新的一轮会话：重置角标计数。
+        if pendingURLs.isEmpty {
+            completedCount = 0
+            totalCount = 1
         }
 
         let destination = ArchiveExtractor.defaultDestination(for: url)
@@ -147,6 +155,9 @@ final class ArchiveSession: ObservableObject {
     private var elapsedTask: Task<Void, Never>?
     /// 已有任务在进行时，新请求排队等待。
     private var pendingURLs: [URL] = []
+    /// 本轮会话的进度角标：已完成数 / 总数。
+    private var completedCount = 0
+    private var totalCount = 0
 
     /// 解压过程中每秒刷新「已用时间」，配合不确定进度条。
     private func startElapsedTimer(url: URL) {
@@ -175,6 +186,21 @@ final class ArchiveSession: ObservableObject {
         cancelFlag.set()
     }
 
+    /// 顶部角标，例如「(1/2)」；只有一个任务时不显示。
+    private var badgeSuffix: String {
+        guard totalCount > 1 else { return "" }
+        return " (\(completedCount + 1)/\(totalCount))"
+    }
+
+    /// 明细后缀，提示还有多少在排队。
+    private var queueSuffix: String {
+        guard !pendingURLs.isEmpty else { return "" }
+        return String(
+            format: NSLocalizedString(" · 还有 %d 个排队", comment: ""),
+            pendingURLs.count
+        )
+    }
+
     private func updatePanel(
         url: URL,
         progress: Double,
@@ -193,8 +219,8 @@ final class ArchiveSession: ObservableObject {
                 title: String(
                     format: NSLocalizedString("AZip - 正在解压缩 %@", comment: ""),
                     url.lastPathComponent
-                ),
-                detail: detail,
+                ) + badgeSuffix,
+                detail: detail + queueSuffix,
                 progress: progress,
                 isFinished: finished,
                 isIndeterminate: indeterminate
@@ -208,6 +234,7 @@ final class ArchiveSession: ObservableObject {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
             self.elapsedTask?.cancel()
+            self.completedCount += 1
             if let next = pendingURLs.first {
                 pendingURLs.removeFirst()
                 self.job = nil
