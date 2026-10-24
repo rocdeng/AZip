@@ -102,39 +102,11 @@ struct AssociationSettingsPane: View {
     }
 
     private var optionRow: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "trash")
-                .font(.system(size: 15))
-                .foregroundStyle(.secondary)
-                .frame(width: 24)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text("解压后删除压缩包")
-                    .font(.system(size: 12))
-                Text("把原压缩包移到废纸篓（可恢复）")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Toggle("", isOn: $deleteArchiveAfterExtraction)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-        )
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
+        Toggle("解压后删除压缩包", isOn: $deleteArchiveAfterExtraction)
+            .toggleStyle(.checkbox)
+            .font(.system(size: 11))
+            .padding(.horizontal, 22)
+            .padding(.top, 10)
     }
 
     private var footer: some View {
