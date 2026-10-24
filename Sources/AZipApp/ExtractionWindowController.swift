@@ -7,6 +7,8 @@ final class ExtractionWindowController {
     static let shared = ExtractionWindowController()
 
     private var panel: NSWindow?
+    private var moveObserver: NSObjectProtocol?
+    private static let frameKey = "extractionPanel"
 
     private let panelSize = NSSize(width: 380, height: 84)
 
@@ -54,14 +56,30 @@ final class ExtractionWindowController {
         container.addSubview(host)
 
         panel.contentView = container
-        panel.center()
+        WindowFrameMemory.place(panel, key: Self.frameKey, centeredOn: windowToHide)
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+
+        // 拖动后记住位置，下次直接沿用。
+        moveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: panel,
+            queue: .main
+        ) { [weak panel] _ in
+            guard let panel else { return }
+            MainActor.assumeIsolated {
+                WindowFrameMemory.save(panel, key: Self.frameKey)
+            }
+        }
 
         self.panel = panel
     }
 
     func close() {
+        if let moveObserver {
+            NotificationCenter.default.removeObserver(moveObserver)
+            self.moveObserver = nil
+        }
         panel?.orderOut(nil)
         panel = nil
     }
