@@ -11,6 +11,26 @@ final class DiskImageMounterTests: XCTestCase {
         XCTAssertEqual(result.volumeName, "TestApp")
     }
 
+    func testParsesMountPointSkippingLeadingSLABanner() throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "attach_plist", withExtension: "txt"))
+        let plistText = try String(contentsOf: url, encoding: .utf8)
+        let withBanner = "Digit77.com SLA banner\nAgree Y/N? \n" + plistText
+        let result = try DiskImageMounter.parseAttachOutput(Data(withBanner.utf8))
+        XCTAssertEqual(result.mountPoint.path, "/Volumes/TestApp")
+        XCTAssertEqual(result.deviceEntry, "/dev/disk9s1")
+    }
+
+    func testStandardInputUsesNullTerminatedPassphraseFollowedBySLAAccept() {
+        XCTAssertEqual(
+            DiskImageMounter.makeHdiutilStandardInput(password: "digit77.com"),
+            "digit77.com\0Y\n"
+        )
+        XCTAssertEqual(
+            DiskImageMounter.makeHdiutilStandardInput(password: nil),
+            "Y\n"
+        )
+    }
+
     func testParsesPlistWithoutMountPoint() throws {
         let xml = """
         <?xml version="1.0" encoding="UTF-8"?>

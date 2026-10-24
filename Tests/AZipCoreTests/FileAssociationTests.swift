@@ -5,7 +5,7 @@ final class FileAssociationTests: XCTestCase {
     func testDeclaresBothDiskImageUTIs() {
         XCTAssertEqual(
             FileAssociationService.diskImageUTIs,
-            ["com.apple.disk-image-udif", "public.disk-image"]
+            ["com.apple.disk-image-udif"]
         )
     }
 

@@ -42,8 +42,9 @@ public struct FileTypeAssociation: Sendable, Identifiable, Hashable {
 }
 
 public enum FileAssociationService {
-    /// 具体 UTI 优先，父类型兜底。Finder 双击 dmg 时两者都会被查询。
-    public static let diskImageUTIs = ["com.apple.disk-image-udif", "public.disk-image"]
+    /// 只认 `.dmg` 的具体 UTI。父类型 `public.disk-image` 会把 `.img` 等
+    /// 同类文件也一并抢过来，因此不再声明它。
+    public static let diskImageUTIs = ["com.apple.disk-image-udif"]
 
     public static let systemDiskImageHandler = "com.apple.DiskImageMounter"
 

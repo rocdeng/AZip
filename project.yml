@@ -68,7 +68,6 @@ targets:
             LSHandlerRank: Owner
             CFBundleTypeIconFile: dmg.icns
             LSItemContentTypes:
-              - public.disk-image
               - com.apple.disk-image-udif
           - CFBundleTypeName: ZIP Archive
             CFBundleTypeRole: Viewer
