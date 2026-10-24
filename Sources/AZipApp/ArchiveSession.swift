@@ -61,6 +61,13 @@ final class ArchiveSession: ObservableObject {
         cancelFlag.reset()
         job = ExtractionJob(sourceURL: url, destination: destination)
 
+        updatePanel(
+            url: url,
+            progress: 0,
+            detail: NSLocalizedString("准备中…", comment: ""),
+            finished: false
+        )
+
         // 独立浮窗承载进度，主窗口先让位。
         let mainWindow = NSApp.windows.first {
             $0.identifier?.rawValue == "AZipMainWindow"
@@ -77,6 +84,15 @@ final class ArchiveSession: ObservableObject {
                             guard var current = self.job else { return }
                             current.progress = value
                             self.job = current
+                            self.updatePanel(
+                                url: url,
+                                progress: value,
+                                detail: String(
+                                    format: NSLocalizedString("%d%% · 正在解压", comment: ""),
+                                    Int((value * 100).rounded())
+                                ),
+                                finished: false
+                            )
                         }
                     },
                     isCancelled: { [cancelFlag] in
@@ -113,6 +129,22 @@ final class ArchiveSession: ObservableObject {
 
     func cancel() {
         cancelFlag.set()
+    }
+
+    private func updatePanel(url: URL, progress: Double, detail: String, finished: Bool) {
+        TaskPanelModel.shared.update(
+            TaskPanelState(
+                kind: .extracting,
+                iconURL: url,
+                title: String(
+                    format: NSLocalizedString("AZip - 正在解压缩 %@", comment: ""),
+                    url.lastPathComponent
+                ),
+                detail: detail,
+                progress: progress,
+                isFinished: finished
+            )
+        )
     }
 
     /// 完成/取消后自动关闭浮窗；失败保留，让用户看到原因。

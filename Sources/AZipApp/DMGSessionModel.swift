@@ -482,6 +482,13 @@ final class DMGSessionModel: ObservableObject {
         isInstallInFlight = true
         state = .installing(app: appURL, progress: 0)
 
+        // 与解压共用同一个独立浮窗。
+        updateInstallPanel(appURL: appURL, progress: 0, finished: false)
+        let mainWindow = NSApp.windows.first {
+            $0.identifier?.rawValue == "AZipMainWindow"
+        }
+        ExtractionWindowController.shared.show(over: mainWindow)
+
         Task { [weak self] in
             guard let self else { return }
             // 所有退出路径（成功、冲突、失败）都必须复位该标志；
@@ -500,6 +507,11 @@ final class DMGSessionModel: ObservableObject {
                             // 迟到的回调不能把已完成的安装重新拉回 .installing。
                             if case .installing = self.state {
                                 self.state = .installing(app: appURL, progress: value)
+                                self.updateInstallPanel(
+                                    appURL: appURL,
+                                    progress: value,
+                                    finished: false
+                                )
                             }
                         }
                     }
@@ -548,26 +560,63 @@ final class DMGSessionModel: ObservableObject {
                     )
                     self.reloadCurrent()
                 } else {
-                    // 安装与卸载都已完成，会话结束：清空根目录条目，
-                    // 否则 `.idle` 下 BottomBar 仍会认为有可安装应用。
+                    // 安装与卸载都已完成：浮窗显示完成，短暂停留后退出，
+                    // 不再把主窗口切回设置界面。
+                    self.updateInstallPanel(appURL: appURL, progress: 1, finished: true)
                     self.mount = nil
                     self.rootEntries = []
                     self.navigationStack = []
                     self.layout = nil
-                    self.state = .idle
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(1.4))
+                        NSApp.terminate(nil)
+                    }
                 }
             } catch InstallError.conflict(_) {
                 guard token == self.sessionToken else { return }
+                self.closeInstallPanel()
                 self.pendingConflict = ConflictRequest(appURL: appURL)
                 self.reloadCurrent()
                 self.leaveInstallingIfNeeded()
             } catch {
                 guard token == self.sessionToken else { return }
+                self.closeInstallPanel()
                 self.banner = BannerMessage(text: self.describe(error), isError: true)
                 self.reloadCurrent()
                 self.leaveInstallingIfNeeded()
             }
         }
+    }
+
+    private func updateInstallPanel(appURL: URL, progress: Double, finished: Bool) {
+        let name = appURL.deletingPathExtension().lastPathComponent
+        let title = finished
+            ? String(format: NSLocalizedString("AZip - 已安装 %@", comment: ""), name)
+            : String(format: NSLocalizedString("AZip - 正在安装 %@", comment: ""), name)
+        let detail = finished
+            ? NSLocalizedString("安装完成", comment: "")
+            : String(
+                format: NSLocalizedString("%d%% · 正在复制到应用程序", comment: ""),
+                Int((progress * 100).rounded())
+            )
+        TaskPanelModel.shared.update(
+            TaskPanelState(
+                kind: .installing,
+                iconURL: appURL,
+                title: title,
+                detail: detail,
+                progress: progress,
+                isFinished: finished
+            )
+        )
+    }
+
+    /// 关闭安装浮窗并把主窗口带回前台（冲突/失败时继续用主界面）。
+    private func closeInstallPanel() {
+        TaskPanelModel.shared.update(nil)
+        ExtractionWindowController.shared.close()
+        NSApp.windows.first { $0.identifier?.rawValue == "AZipMainWindow" }?
+            .makeKeyAndOrderFront(nil)
     }
 
     // MARK: - Teardown

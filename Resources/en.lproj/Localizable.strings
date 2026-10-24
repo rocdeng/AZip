@@ -124,3 +124,10 @@
 
 "后退" = "Back";
 "前进" = "Forward";
+
+"AZip - 正在安装 %@" = "AZip - Installing %@";
+"AZip - 已安装 %@" = "AZip - Installed %@";
+"%d%% · 正在解压" = "%d%% · Extracting";
+"%d%% · 正在复制到应用程序" = "%d%% · Copying to Applications";
+"安装完成" = "Installation complete";
+"准备中…" = "Preparing…";
