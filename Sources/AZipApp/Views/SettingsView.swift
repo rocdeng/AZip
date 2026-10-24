@@ -28,8 +28,7 @@ struct AssociationSettingsPane: View {
                 .padding(.top, 26)
                 .padding(.bottom, 8)
 
-            ScrollView {
-                VStack(spacing: 0) {
+            VStack(spacing: 0) {
                     ForEach(
                         Array(FileAssociationService.supportedTypes.enumerated()),
                         id: \.element.id
@@ -41,20 +40,20 @@ struct AssociationSettingsPane: View {
                                 .padding(.leading, 54)
                         }
                     }
-                }
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-                )
-                .padding(.horizontal, 18)
             }
-            .scrollIndicators(.never)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+            )
+            .padding(.horizontal, 18)
 
             optionRow
+
+            Spacer(minLength: 0)
 
             footer
         }
@@ -111,7 +110,7 @@ struct AssociationSettingsPane: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("勾选后，双击对应文件将由 AZip 打开。压缩格式的打开与解压功能将在后续版本提供。")
+            Text("勾选后，双击对应文件将由 AZip 打开。")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
