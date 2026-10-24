@@ -53,6 +53,34 @@ targets:
             LSItemContentTypes:
               - public.disk-image
               - com.apple.disk-image-udif
+          - CFBundleTypeName: ZIP Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.zip-archive
+          - CFBundleTypeName: RAR Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.rarlab.rar-archive
+          - CFBundleTypeName: 7-Zip Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - org.7-zip.7-zip-archive
+          - CFBundleTypeName: TAR Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.tar-archive
+              - org.gnu.gnu-zip-tar-archive
+          - CFBundleTypeName: GZIP Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - org.gnu.gnu-zip-archive
+              - public.bzip2-archive
+              - org.tukaani.xz-archive
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dengpeng.AZip

@@ -3,7 +3,7 @@ import AZipCore
 import SwiftUI
 
 struct SettingsView: View {
-    @State private var isDefault = false
+    @State private var states: [String: Bool] = [:]
     @State private var message: String?
 
     private var bundleID: String {
@@ -11,68 +11,100 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section("文件关联") {
-                HStack {
-                    Text("DMG 磁盘映像")
-                    Spacer()
-                    Text(isDefault ? "已关联" : "未关联")
-                        .foregroundStyle(isDefault ? .green : .secondary)
+        VStack(spacing: 0) {
+            Form {
+                Section("文件关联") {
+                    ForEach(FileAssociationService.supportedTypes) { type in
+                        Toggle(isOn: binding(for: type)) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(type.label)
+                                Text(type.fileExtensions.map { ".\($0)" }.joined(separator: "  "))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .toggleStyle(.switch)
+                    }
                 }
 
-                HStack {
-                    Button("设为默认打开方式") {
-                        setDefault()
-                    }
-                    Button("恢复系统默认") {
-                        restore()
-                    }
-                    Button("重新显示关联提示") {
-                        DMGSessionModel.shared.presentAssociationPrompt()
-                        message = "已显示关联提示"
+                Section {
+                    Text("勾选后，双击对应文件将由 AZip 打开。压缩格式的打开与解压功能将在后续版本提供。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("全部恢复为系统默认") {
+                        restoreAll()
                     }
                 }
 
                 if let message {
-                    Text(message)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                    Section {
+                        Text(message)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
-        .frame(width: 440, height: 200)
+        .frame(width: 460, height: 430)
         .onAppear(perform: refresh)
-        // 在访达里改了关联后，设置页保持打开也能刷新；onReceive 随视图消失自动取消订阅。
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
             refresh()
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
+        ) { _ in
             refresh()
         }
+    }
+
+    private func binding(for type: FileTypeAssociation) -> Binding<Bool> {
+        Binding(
+            get: {
+                states[type.id]
+                    ?? FileAssociationService.isDefault(bundleID: bundleID, for: type)
+            },
+            set: { newValue in
+                do {
+                    if newValue {
+                        try FileAssociationService.setDefault(bundleID: bundleID, for: type)
+                        message = "已将 \(type.label) 关联到 AZip"
+                    } else {
+                        try FileAssociationService.restoreSystemDefault(for: type)
+                        message = "已将 \(type.label) 恢复为系统默认"
+                    }
+                } catch {
+                    message = "设置失败：\(error.localizedDescription)"
+                }
+                refresh()
+            }
+        )
     }
 
     private func refresh() {
-        isDefault = FileAssociationService.isDefault(bundleID: bundleID)
+        var updated: [String: Bool] = [:]
+        for type in FileAssociationService.supportedTypes {
+            updated[type.id] = FileAssociationService.isDefault(bundleID: bundleID, for: type)
+        }
+        states = updated
     }
 
-    private func setDefault() {
-        do {
-            try FileAssociationService.setDefault(bundleID: bundleID)
-            message = "已设为默认打开方式"
-        } catch {
-            message = "设置失败：\(error)"
+    private func restoreAll() {
+        var failures: [String] = []
+        for type in FileAssociationService.supportedTypes {
+            do {
+                try FileAssociationService.restoreSystemDefault(for: type)
+            } catch {
+                failures.append(type.label)
+            }
         }
-        refresh()
-    }
-
-    private func restore() {
-        do {
-            try FileAssociationService.restoreSystemDefault()
-            message = "已将 .dmg 恢复为系统默认打开方式"
-        } catch {
-            message = "恢复失败：\(error)"
-        }
+        message = failures.isEmpty
+            ? "已全部恢复为系统默认"
+            : "以下格式恢复失败：\(failures.joined(separator: "、"))"
         refresh()
     }
 }

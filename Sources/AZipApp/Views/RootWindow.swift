@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct RootWindow: View {
     @ObservedObject var model: DMGSessionModel
     @State private var isDropTargeted = false
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         // 毛玻璃由 `WindowConfigurator` 在 AppKit 层铺满整个窗口；
@@ -53,6 +54,19 @@ struct RootWindow: View {
                     .padding(.top, 52)
                     .onTapGesture { model.banner = nil }
             }
+        }
+        .onAppear {
+            // 注册设置窗口入口；直接启动时由 AppDelegate 触发。
+            SettingsWindow.opener = { openSettings() }
+            if model.shouldOpenSettings {
+                model.shouldOpenSettings = false
+                openSettings()
+            }
+        }
+        .onChange(of: model.shouldOpenSettings) { _, shouldOpen in
+            guard shouldOpen else { return }
+            model.shouldOpenSettings = false
+            openSettings()
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers)

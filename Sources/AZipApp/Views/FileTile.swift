@@ -9,45 +9,15 @@ struct FileTile: View {
 
     @State private var isHovering = false
 
-    /// 符号链接取目标图标：DMG 里的 Applications 快捷方式要显示成蓝色文件夹，
-    /// 而不是带箭头的链接图钉。
-    private var iconURL: URL {
-        guard entry.kind == .symbolicLink,
-              let destination = try? FileManager.default.destinationOfSymbolicLink(
-                  atPath: entry.url.path
-              ) else {
-            return entry.url
-        }
-        return URL(fileURLWithPath: destination)
-    }
-
-    private var aliasBadge: some View {
-        let side = iconSize * 0.34
-        return Image(systemName: "arrow.turn.up.right")
-            .font(.system(size: side * 0.58, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: side, height: side)
-            .background(
-                Circle()
-                    .fill(Color(nsColor: .secondaryLabelColor).opacity(0.75))
-            )
-            .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 0.8))
-            .offset(x: -iconSize * 0.02, y: iconSize * 0.02)
-    }
-
     var body: some View {
         VStack(spacing: 4) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: iconURL.path))
+            // 直接对符号链接路径取图标：系统已把「文件夹 + 别名徽章」合成好，
+            // 自己解析目标再叠角标反而会丢掉徽章、换成闭合文件夹。
+            Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: iconSize, height: iconSize)
-                .overlay(alignment: .bottomLeading) {
-                    // Finder 给快捷方式加的下弯小箭头角标，符号链接才有。
-                    if entry.kind == .symbolicLink {
-                        aliasBadge
-                    }
-                }
 
             Text(entry.name)
                 .font(.system(size: 11))

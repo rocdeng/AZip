@@ -5,13 +5,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 已排入一次延迟退出流程；期间再次收到回调只返回 `.terminateLater`，避免重复 reply。
     private var isTerminating = false
 
+    /// 本次启动是否收到了要打开的文件；直接运行（无文件参数）时为 false。
+    private var didReceiveOpenRequest = false
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
-        DMGSessionModel.shared.offerAssociationIfNeeded()
         DMGSessionModel.shared.reportPendingBackups()
+
+        // 直接运行 AZip（而不是双击某个文件）时，把设置窗口推到前面，
+        // 让用户第一眼就能看到文件关联配置。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let self, !self.didReceiveOpenRequest else { return }
+            guard case .idle = DMGSessionModel.shared.state else { return }
+            DMGSessionModel.shared.shouldOpenSettings = true
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        didReceiveOpenRequest = true
         for url in urls where url.pathExtension.lowercased() == "dmg" {
             DMGSessionModel.shared.open(dmgURL: url)
         }

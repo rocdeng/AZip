@@ -34,6 +34,9 @@ final class DMGSessionModel: ObservableObject {
     static let shared = DMGSessionModel()
 
     @Published private(set) var state: SessionState = .idle
+
+    /// 由 AppDelegate 置位，根视图观察到后用 `openSettings` 打开设置窗口。
+    @Published var shouldOpenSettings = false
     @Published private(set) var mount: MountResult?
     @Published private(set) var dmgName: String = "AZip"
     @Published private(set) var navigationStack: [URL] = []
