@@ -115,3 +115,7 @@
 "无法安装到 %@：%@；且无法从备份 %@ 回滚：%@" = "Failed to install to %@: %@; and couldn't restore backup from %@: %@";
 "退出码 %d：%@" = "exit code %d: %@";
 "普通退出失败（%@）；强制退出失败（%@）" = "Standard eject failed (%@); force eject also failed (%@)";
+
+"此磁盘映像已加密" = "This disk image is encrypted";
+"密码" = "Password";
+"解开" = "Unlock";

@@ -33,6 +33,7 @@ public enum ProcessRunner {
     public static func run(
         _ executable: String,
         _ arguments: [String],
+        standardInput: String? = nil,
         timeoutSeconds: Double = 60
     ) async throws -> Result {
         let process = Process()
@@ -44,10 +45,19 @@ public enum ProcessRunner {
         process.standardOutput = outPipe
         process.standardError = errPipe
 
+        let inPipe = Pipe()
+        process.standardInput = standardInput == nil ? FileHandle.nullDevice : inPipe
+
         do {
             try process.run()
         } catch {
             throw ProcessRunnerError.launchFailed(error.localizedDescription)
+        }
+
+        if let standardInput {
+            // 写入后立刻关闭，避免子进程等待 EOF 而挂住。
+            inPipe.fileHandleForWriting.write(Data(standardInput.utf8))
+            try? inPipe.fileHandleForWriting.close()
         }
 
         let outHandle = outPipe.fileHandleForReading

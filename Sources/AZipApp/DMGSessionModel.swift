@@ -8,6 +8,8 @@ enum SessionState: Sendable {
     case mounting
     case browsing(entries: [VolumeEntry], layout: DMGWindowLayout?)
     case installing(app: URL, progress: Double)
+    /// 加密磁盘映像：等待用户输入密码，`message` 为上一次尝试的失败原因。
+    case needsPassword(url: URL, message: String?)
     case failed(String)
 }
 
@@ -106,7 +108,7 @@ final class DMGSessionModel: ObservableObject {
         switch state {
         case .mounting, .installing:
             return true
-        case .idle, .browsing, .failed:
+        case .idle, .browsing, .failed, .needsPassword:
             return false
         }
     }
@@ -227,9 +229,33 @@ final class DMGSessionModel: ObservableObject {
             guard token == sessionToken else { return }
         }
 
+        // 加密映像先向用户要密码，不直接挂载（否则 hdiutil 会弹系统对话框或失败）。
+        if await DiskImageMounter.isEncrypted(dmgURL) {
+            guard token == sessionToken else { return }
+            state = .needsPassword(url: dmgURL, message: nil)
+            return
+        }
+
+        await performMount(dmgURL, password: nil, token: token)
+    }
+
+    /// 用户提交密码后继续挂载。
+    func submitPassword(_ password: String) {
+        guard case let .needsPassword(url, _) = state else { return }
+        let token = sessionToken
+        state = .mounting
+        Task { await performMount(url, password: password, token: token) }
+    }
+
+    func cancelPasswordPrompt() {
+        guard case .needsPassword = state else { return }
+        state = .idle
+    }
+
+    private func performMount(_ dmgURL: URL, password: String?, token: UUID) async {
         var attached: MountResult?
         do {
-            let result = try await DiskImageMounter.attach(dmgURL)
+            let result = try await DiskImageMounter.attach(dmgURL, password: password)
             attached = result
 
             guard token == sessionToken else {
@@ -264,7 +290,12 @@ final class DMGSessionModel: ObservableObject {
             }
             guard token == sessionToken else { return }
             mount = nil
-            state = .failed(describe(error))
+            if password != nil {
+                // 多半是密码错误：留在密码输入界面，允许重试。
+                state = .needsPassword(url: dmgURL, message: describe(error))
+            } else {
+                state = .failed(describe(error))
+            }
         }
     }
 

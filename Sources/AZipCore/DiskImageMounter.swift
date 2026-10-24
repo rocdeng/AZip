@@ -20,12 +20,30 @@ public enum MountError: Error, Sendable {
 public enum DiskImageMounter {
     private static let hdiutil = "/usr/bin/hdiutil"
 
-    public static func attach(_ dmgURL: URL) async throws -> MountResult {
+    /// 是否为加密映像（需要密码才能挂载）。
+    public static func isEncrypted(_ dmgURL: URL) async -> Bool {
+        guard let result = try? await ProcessRunner.run(
+            hdiutil, ["isencrypted", dmgURL.path], timeoutSeconds: 20
+        ) else {
+            return false
+        }
+        return result.stdout.contains("encrypted: YES")
+    }
+
+    public static func attach(_ dmgURL: URL, password: String? = nil) async throws -> MountResult {
+        var arguments = [
+            "attach", dmgURL.path, "-plist", "-nobrowse", "-noautoopen", "-readonly", "-noverify"
+        ]
+        if password != nil {
+            // 由 stdin 提供口令，避免 hdiutil 弹系统密码框。
+            arguments.append("-stdinpass")
+        }
         let result = try await ProcessRunner.run(
             hdiutil,
             // `-noverify` 跳过整卷校验和：macOS 双击挂载同样不校验，
             // 加上它才能做到接近系统原生速度（大 dmg 校验要几十秒）。
-            ["attach", dmgURL.path, "-plist", "-nobrowse", "-noautoopen", "-readonly", "-noverify"],
+            arguments,
+            standardInput: password.map { $0 + "\n" },
             timeoutSeconds: 120
         )
         guard result.status == 0 else {

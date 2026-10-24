@@ -210,6 +210,13 @@ struct RootWindow: View {
         case .mounting:
             ProgressView(NSLocalizedString("正在挂载…", comment: ""))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .needsPassword(url, message):
+            PasswordPromptView(
+                fileName: url.lastPathComponent,
+                message: message,
+                onSubmit: { model.submitPassword($0) },
+                onCancel: { model.cancelPasswordPrompt() }
+            )
         case let .browsing(entries, layout):
             if let layout, model.navigationStack.isEmpty {
                 LayoutContentView(layout: layout, entries: entries, onOpen: model.enter)
