@@ -119,3 +119,5 @@
 "此磁盘映像已加密" = "This disk image is encrypted";
 "密码" = "Password";
 "解开" = "Unlock";
+
+"密码不正确，或该磁盘映像有额外保护，无法解锁。" = "Incorrect password, or this disk image has extra protection.";

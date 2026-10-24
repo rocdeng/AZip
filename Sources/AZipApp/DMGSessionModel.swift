@@ -291,8 +291,14 @@ final class DMGSessionModel: ObservableObject {
             guard token == sessionToken else { return }
             mount = nil
             if password != nil {
-                // 多半是密码错误：留在密码输入界面，允许重试。
-                state = .needsPassword(url: dmgURL, message: describe(error))
+                // 留在密码输入界面允许重试；原始的 hdiutil/diskutil 报错对用户没有意义。
+                state = .needsPassword(
+                    url: dmgURL,
+                    message: NSLocalizedString(
+                        "密码不正确，或该磁盘映像有额外保护，无法解锁。",
+                        comment: ""
+                    )
+                )
             } else {
                 state = .failed(describe(error))
             }

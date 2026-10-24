@@ -99,8 +99,16 @@ public enum DiskImageMounter {
     }
 
     public static func parseAttachOutput(_ data: Data) throws -> MountResult {
+        // 某些第三方 dmg 会在 plist 之前打印广告/说明文本，直接整体解析会失败；
+        // 从第一个 "<?xml" 起截取。
+        var payload = data
+        if let text = String(data: data, encoding: .utf8),
+           let range = text.range(of: "<?xml") {
+            payload = Data(text[range.lowerBound...].utf8)
+        }
+
         guard
-            let plist = try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+            let plist = try PropertyListSerialization.propertyList(from: payload, format: nil) as? [String: Any],
             let entities = plist["system-entities"] as? [[String: Any]]
         else {
             throw MountError.noMountPointFound
