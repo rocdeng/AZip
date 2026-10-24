@@ -28,6 +28,8 @@ targets:
       - path: Resources
         includes:
           - "*.lproj/**"
+      - path: Resources/FileIcons
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dengpeng.AZipCore
@@ -43,6 +45,8 @@ targets:
       - path: Resources
         includes:
           - "*.lproj/**"
+      - path: Resources/FileIcons
+        buildPhase: resources
     dependencies:
       - target: AZipCore
     info:
@@ -62,36 +66,57 @@ targets:
           - CFBundleTypeName: Disk Image
             CFBundleTypeRole: Viewer
             LSHandlerRank: Owner
+            CFBundleTypeIconFile: dmg.icns
             LSItemContentTypes:
               - public.disk-image
               - com.apple.disk-image-udif
           - CFBundleTypeName: ZIP Archive
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
+            CFBundleTypeIconFile: zip.icns
             LSItemContentTypes:
               - public.zip-archive
           - CFBundleTypeName: RAR Archive
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
+            CFBundleTypeIconFile: rar.icns
             LSItemContentTypes:
               - com.rarlab.rar-archive
           - CFBundleTypeName: 7-Zip Archive
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
+            CFBundleTypeIconFile: 7z.icns
             LSItemContentTypes:
               - org.7-zip.7-zip-archive
           - CFBundleTypeName: TAR Archive
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
+            CFBundleTypeIconFile: tar.icns
             LSItemContentTypes:
               - public.tar-archive
+          - CFBundleTypeName: TGZ Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            CFBundleTypeIconFile: tar.icns
+            LSItemContentTypes:
               - org.gnu.gnu-zip-tar-archive
           - CFBundleTypeName: GZIP Archive
             CFBundleTypeRole: Viewer
             LSHandlerRank: Alternate
+            CFBundleTypeIconFile: gz.icns
             LSItemContentTypes:
               - org.gnu.gnu-zip-archive
+          - CFBundleTypeName: BZIP2 Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            CFBundleTypeIconFile: bz2.icns
+            LSItemContentTypes:
               - public.bzip2-archive
+          - CFBundleTypeName: XZ Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            CFBundleTypeIconFile: xz.icns
+            LSItemContentTypes:
               - org.tukaani.xz-archive
     settings:
       base:
