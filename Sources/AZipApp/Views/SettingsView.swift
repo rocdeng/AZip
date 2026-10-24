@@ -2,7 +2,15 @@ import AppKit
 import AZipCore
 import SwiftUI
 
+/// 独立设置窗口（⌘,）以及直接启动时主窗口的内容。
 struct SettingsView: View {
+    var body: some View {
+        AssociationSettingsPane()
+            .frame(width: 460, height: 430)
+    }
+}
+
+struct AssociationSettingsPane: View {
     @State private var states: [String: Bool] = [:]
     @State private var message: String?
 
@@ -48,7 +56,6 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
         }
-        .frame(width: 460, height: 430)
         .onAppear(perform: refresh)
         .onReceive(
             NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)

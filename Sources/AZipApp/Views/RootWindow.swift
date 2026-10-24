@@ -64,15 +64,6 @@ struct RootWindow: View {
         .onAppear {
             // 注册设置窗口入口；直接启动时由 AppDelegate 触发。
             SettingsWindow.opener = { openSettings() }
-            if model.shouldOpenSettings {
-                model.shouldOpenSettings = false
-                openSettings()
-            }
-        }
-        .onChange(of: model.shouldOpenSettings) { _, shouldOpen in
-            guard shouldOpen else { return }
-            model.shouldOpenSettings = false
-            openSettings()
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers)
@@ -170,7 +161,8 @@ struct RootWindow: View {
     private var content: some View {
         switch model.state {
         case .idle:
-            placeholder("双击 .dmg 文件，或按 ⌘O 打开")
+            // 直接启动时主窗口就是设置界面，不显示空白的挂载占位。
+            AssociationSettingsPane()
         case .mounting:
             ProgressView("正在挂载…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

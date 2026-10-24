@@ -5,40 +5,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 已排入一次延迟退出流程；期间再次收到回调只返回 `.terminateLater`，避免重复 reply。
     private var isTerminating = false
 
-    /// 本次启动是否收到了要打开的文件；直接运行（无文件参数）时为 false。
-    private var didReceiveOpenRequest = false
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // 关掉 AppKit 的窗口状态恢复：一旦系统记下「上次退出时没有窗口」，
+        // 之后每次启动都不会再创建主窗口，表现就是“进程在跑但没有任何窗口”。
+        UserDefaults.standard.register(defaults: [
+            "ApplePersistenceIgnoreState": true,
+            "NSQuitAlwaysKeepsWindows": false
+        ])
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         DMGSessionModel.shared.reportPendingBackups()
-
-        // 直接运行 AZip（而不是双击某个文件）时，把设置窗口推到前面，
-        // 让用户第一眼就能看到文件关联配置。
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
-            guard let self, !self.didReceiveOpenRequest else { return }
-            guard case .idle = DMGSessionModel.shared.state else { return }
-            // 直接运行时不要那个空的主窗口，只显示设置。
-            DMGSessionModel.shared.hideMainWindow()
-            DMGSessionModel.shared.shouldOpenSettings = true
-        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        DMGSessionModel.shared.showMainWindow()
+        NSApp.activate(ignoringOtherApps: true)
         for url in urls {
             let ext = url.pathExtension.lowercased()
             if ext == "dmg" {
-                didReceiveOpenRequest = true
                 DMGSessionModel.shared.open(dmgURL: url)
             } else if ArchiveSession.supportedExtensions.contains(ext) {
-                didReceiveOpenRequest = true
                 ArchiveSession.shared.extract(url: url)
             }
         }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // 恢复单窗口语义：关掉最后一个窗口就退出。若有挂载或收尾在进行，
+        // 单窗口语义：关掉最后一个窗口就退出。若有挂载或收尾在进行，
         // applicationShouldTerminate 会等它们结束再回复系统。
         true
     }
@@ -55,7 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !isTerminating else { return .terminateLater }
         isTerminating = true
 
-        // 有挂载、挂载中或卸载中：先等收尾完成，再回复系统。
         Task { @MainActor in
             await model.closeSession()
             NSApp.reply(toApplicationShouldTerminate: true)

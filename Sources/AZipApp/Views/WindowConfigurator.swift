@@ -85,6 +85,7 @@ struct WindowConfigurator: NSViewRepresentable {
         window.isMovableByWindowBackground = true
         window.hasShadow = true
         window.minSize = NSSize(width: 480, height: 320)
+        window.identifier = NSUserInterfaceItemIdentifier("AZipMainWindow")
 
         installVisualEffectView(in: window)
 
