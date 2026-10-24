@@ -219,8 +219,14 @@ struct RootWindow: View {
     private var content: some View {
         switch model.state {
         case .idle:
-            // 直接启动时主窗口就是设置界面，不显示空白的挂载占位。
-            AssociationSettingsPane()
+            if model.launchedWithFile {
+                // 文件会话已结束（取消密码、卸载完成等）：直接退出，不回落设置。
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .onAppear { NSApp.terminate(nil) }
+            } else {
+                AssociationSettingsPane()
+            }
         case .mounting:
             ProgressView(NSLocalizedString("正在挂载…", comment: ""))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

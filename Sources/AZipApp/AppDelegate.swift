@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        DMGSessionModel.shared.launchedWithFile = true
         NSApp.activate(ignoringOtherApps: true)
         for url in urls {
             let ext = url.pathExtension.lowercased()

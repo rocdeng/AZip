@@ -44,6 +44,10 @@ final class DMGSessionModel: ObservableObject {
 
     @Published private(set) var state: SessionState = .idle
 
+    /// 本次启动是否由打开文件触发。为 true 时会话结束后直接退出，
+    /// 不再回落显示设置界面；设置只属于「无参数直接运行」的场景。
+    var launchedWithFile = false
+
     /// 从挂载卷内复制出来的临时 dmg，收尾时删除（仅限本应用创建的文件）。
     private var nestedTemporaryDMG: URL?
 
