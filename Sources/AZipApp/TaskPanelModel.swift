@@ -14,8 +14,8 @@ struct TaskPanelState: Identifiable, Sendable {
     let detail: String
     var progress: Double
     var isFinished: Bool = false
-    /// 是否允许取消（安装暂不支持中断）。
-    var isCancellable: Bool { kind == .extracting }
+    /// 解压与安装都支持取消。
+    var isCancellable: Bool { true }
 }
 
 @MainActor
@@ -25,6 +25,12 @@ final class TaskPanelModel: ObservableObject {
     @Published private(set) var state: TaskPanelState?
 
     func update(_ state: TaskPanelState?) {
+        let line = "update: \(state?.title ?? "nil") progress=\(state?.progress ?? -1)\n"
+        if let handle = FileHandle(forWritingAtPath: "/tmp/azip-panel.log") {
+            handle.seekToEndOfFile(); handle.write(Data(line.utf8)); handle.closeFile()
+        } else {
+            try? line.write(toFile: "/tmp/azip-panel.log", atomically: true, encoding: .utf8)
+        }
         self.state = state
     }
 }

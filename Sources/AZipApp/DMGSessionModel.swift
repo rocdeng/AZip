@@ -47,6 +47,9 @@ final class DMGSessionModel: ObservableObject {
     /// 从挂载卷内复制出来的临时 dmg，收尾时删除（仅限本应用创建的文件）。
     private var nestedTemporaryDMG: URL?
 
+    /// 安装取消标志。
+    private let installCancelFlag = CancelFlag()
+
     @Published private(set) var mount: MountResult?
     @Published private(set) var dmgName: String = "AZip"
     @Published private(set) var navigationStack: [URL] = []
@@ -488,6 +491,7 @@ final class DMGSessionModel: ObservableObject {
 
         let token = sessionToken
         let mountedVolume = mount
+        installCancelFlag.reset()
         isInstallInFlight = true
         state = .installing(app: appURL, progress: 0)
 
@@ -523,7 +527,8 @@ final class DMGSessionModel: ObservableObject {
                                 )
                             }
                         }
-                    }
+                    },
+                    isCancelled: { [installCancelFlag] in installCancelFlag.isSet }
                 )
                 guard token == self.sessionToken else { return }
                 self.banner = BannerMessage(
@@ -576,11 +581,24 @@ final class DMGSessionModel: ObservableObject {
                     self.rootEntries = []
                     self.navigationStack = []
                     self.layout = nil
+                    // 先复位安装标志，否则 applicationShouldTerminate 会拦下退出。
+                    self.isInstallInFlight = false
                     Task { @MainActor in
                         try? await Task.sleep(for: .seconds(1.4))
+                        TaskPanelModel.shared.update(nil)
+                        ExtractionWindowController.shared.close()
                         NSApp.terminate(nil)
                     }
                 }
+            } catch InstallError.cancelled {
+                guard token == self.sessionToken else { return }
+                self.closeInstallPanel()
+                self.banner = BannerMessage(
+                    text: NSLocalizedString("已取消安装", comment: ""),
+                    isError: false
+                )
+                self.reloadCurrent()
+                self.leaveInstallingIfNeeded()
             } catch InstallError.conflict(_) {
                 guard token == self.sessionToken else { return }
                 self.closeInstallPanel()
@@ -595,6 +613,11 @@ final class DMGSessionModel: ObservableObject {
                 self.leaveInstallingIfNeeded()
             }
         }
+    }
+
+    /// 用户点击浮窗的取消按钮。
+    func cancelInstall() {
+        installCancelFlag.set()
     }
 
     private func updateInstallPanel(appURL: URL, progress: Double, finished: Bool) {

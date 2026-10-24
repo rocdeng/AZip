@@ -27,6 +27,7 @@ public enum InstallError: Error, Sendable {
     case targetNotWritable(URL)
     case conflict(URL)
     case copyFailed(String)
+    case cancelled
     case moveFailed(String)
 }
 
@@ -36,7 +37,8 @@ public enum AppInstaller {
 
     public static func install(
         _ request: InstallRequest,
-        progress: @escaping @Sendable (Double) -> Void = { _ in }
+        progress: @escaping @Sendable (Double) -> Void = { _ in },
+        isCancelled: @escaping @Sendable () -> Bool = { false }
     ) async throws -> URL {
         let fileManager = FileManager.default
         let source = request.sourceApp
@@ -74,27 +76,43 @@ public enum AppInstaller {
                 }
             }
 
-            let copy: ProcessRunner.Result
+            // 用可终止的进程跑 ditto，让用户可以取消安装。
+            let ditto = Process()
+            ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            ditto.arguments = ["--rsrc", "--extattr", "--acl", source.path, stagingApp.path]
+            let errorPipe = Pipe()
+            ditto.standardError = errorPipe
+            ditto.standardOutput = FileHandle.nullDevice
             do {
-                copy = try await ProcessRunner.run(
-                    "/usr/bin/ditto",
-                    ["--rsrc", "--extattr", "--acl", source.path, stagingApp.path],
-                    timeoutSeconds: 900
-                )
+                try ditto.run()
             } catch {
                 progressTask.cancel()
                 await progressTask.value
-                throw error
+                throw InstallError.copyFailed(error.localizedDescription)
             }
-            // 先等待轮询任务结束，避免它在进度回调或函数返回后再触发。
+
+            while ditto.isRunning {
+                if isCancelled() {
+                    ditto.terminate()
+                    ditto.waitUntilExit()
+                    progressTask.cancel()
+                    await progressTask.value
+                    throw InstallError.cancelled
+                }
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+
             progressTask.cancel()
             await progressTask.value
 
-            guard copy.status == 0 else {
+            guard ditto.terminationStatus == 0 else {
+                let data = (try? errorPipe.fileHandleForReading.readToEnd()) ?? Data()
+                let text = String(decoding: data, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
                 throw InstallError.copyFailed(
-                    copy.stderr.isEmpty
-                        ? String(format: NSLocalizedString("ditto 退出码 %d", comment: ""), copy.status)
-                        : copy.stderr
+                    text.isEmpty
+                        ? String(format: NSLocalizedString("ditto 退出码 %d", comment: ""), ditto.terminationStatus)
+                        : text
                 )
             }
             progress(1.0)

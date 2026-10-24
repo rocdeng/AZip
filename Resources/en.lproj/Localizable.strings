@@ -131,3 +131,5 @@
 "%d%% · 正在复制到应用程序" = "%d%% · Copying to Applications";
 "安装完成" = "Installation complete";
 "准备中…" = "Preparing…";
+
+"已取消安装" = "Installation cancelled";

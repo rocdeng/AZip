@@ -3,23 +3,17 @@ import SwiftUI
 
 /// 通用进度浮窗内容：解压与安装共用（380×84 横向条）。
 struct TaskPanelView: View {
-    @ObservedObject var model = TaskPanelModel.shared
+    let state: TaskPanelState
     let onCancel: () -> Void
 
     var body: some View {
-        Group {
-            if let state = model.state {
-                content(for: state)
-            } else {
-                Color.clear
-            }
-        }
-        .frame(width: 380, height: 84)
+        content
+            .frame(width: 380, height: 84)
     }
 
-    private func content(for state: TaskPanelState) -> some View {
+    private var content: some View {
         HStack(spacing: 12) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: state.iconURL.path))
+            Image(nsImage: TaskIconCache.icon(for: state.iconURL))
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
@@ -62,5 +56,19 @@ struct TaskPanelView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+}
+
+
+/// 任务进行中源卷可能被卸载，图标必须在挂载期间取好并缓存。
+@MainActor
+private enum TaskIconCache {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for url: URL) -> NSImage {
+        if let cached = cache[url.path] { return cached }
+        let image = NSWorkspace.shared.icon(forFile: url.path)
+        cache[url.path] = image
+        return image
     }
 }

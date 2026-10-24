@@ -87,13 +87,23 @@ final class ExtractionWindowController {
 
 /// 浮窗内容：跟随 `ArchiveSession` 的状态刷新。
 struct ExtractionPanel: View {
-    @ObservedObject private var session = ArchiveSession.shared
+    @ObservedObject private var panel = TaskPanelModel.shared
     @ObservedObject private var model = DMGSessionModel.shared
 
     var body: some View {
         Group {
-            if let job = session.job {
-                ExtractView(session: session, job: job)
+            if let state = panel.state {
+                TaskPanelView(
+                    state: state,
+                    onCancel: {
+                        switch state.kind {
+                        case .extracting:
+                            ArchiveSession.shared.cancel()
+                        case .installing:
+                            DMGSessionModel.shared.cancelInstall()
+                        }
+                    }
+                )
             } else {
                 Color.clear
             }
