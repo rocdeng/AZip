@@ -15,7 +15,15 @@ struct FileTile: View {
         if let style = FileTypeIconStyle.style(
             forExtension: entry.url.pathExtension
         ) {
-            FileTypeIcon(style: style)
+            // 优先用设计稿导出的 PNG；缺失时回退到矢量绘制。
+            if let image = NSImage(named: style.key) {
+                Image(nsImage: image)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                FileTypeIcon(style: style)
+            }
         } else {
             Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
                 .resizable()

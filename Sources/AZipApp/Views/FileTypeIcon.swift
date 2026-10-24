@@ -2,11 +2,14 @@ import SwiftUI
 
 /// 关联文件类型的图标规格（与设计稿一致：折角纸张 + 琥珀橙系 + 缩写）。
 struct FileTypeIconStyle: Sendable {
+    /// 官方导出图标的资源名（大写格式名）。
+    let key: String
     let abbreviation: String
     let color: Color
     let isDisc: Bool
 
-    init(_ abbreviation: String, _ hex: UInt32, isDisc: Bool = false) {
+    init(_ key: String, _ abbreviation: String, _ hex: UInt32, isDisc: Bool = false) {
+        self.key = key
         self.abbreviation = abbreviation
         self.color = Color(hex: hex)
         self.isDisc = isDisc
@@ -15,25 +18,26 @@ struct FileTypeIconStyle: Sendable {
     /// 按扩展名取图标样式；不认识的格式返回 nil（回退系统图标）。
     static func style(forExtension ext: String) -> FileTypeIconStyle? {
         switch ext.lowercased() {
-        case "7z":   return FileTypeIconStyle("7Z", 0xB5652A)
-        case "zip":  return FileTypeIconStyle("ZIP", 0xF08A2C)
-        case "tar":  return FileTypeIconStyle("TAR", 0xE8A33D)
-        case "zst":  return FileTypeIconStyle("ZST", 0xD96A3A)
-        case "gz":   return FileTypeIconStyle("GZ", 0xC97B3C)
-        case "tgz":  return FileTypeIconStyle("TGZ", 0xC97B3C)
-        case "bz2":  return FileTypeIconStyle("BZ2", 0xE8823A)
-        case "tbz", "tbz2": return FileTypeIconStyle("TBZ", 0xE8823A)
-        case "xz":   return FileTypeIconStyle("XZ", 0xDDA23C)
-        case "txz":  return FileTypeIconStyle("TXZ", 0xDDA23C)
-        case "lz":   return FileTypeIconStyle("LZ", 0xA85A28)
-        case "lz4":  return FileTypeIconStyle("LZ4", 0xD9924A)
-        case "br":   return FileTypeIconStyle("BR", 0xE2772E)
-        case "lrz":  return FileTypeIconStyle("LRZ", 0x9C5424)
-        case "aar":  return FileTypeIconStyle("AAR", 0xB0602C)
-        case "sz":   return FileTypeIconStyle("SN", 0xC9A24A)
-        case "wim":  return FileTypeIconStyle("WIM", 0xB06A32)
-        case "dmg":  return FileTypeIconStyle("DMG", 0x4A4E57, isDisc: true)
-        case "iso":  return FileTypeIconStyle("ISO", 0x6A707A, isDisc: true)
+        case "7z":   return FileTypeIconStyle("7Z", "7Z", 0xB5652A)
+        case "rar":  return FileTypeIconStyle("RAR", "RAR", 0x9A4E2A)
+        case "zip":  return FileTypeIconStyle("ZIP", "ZIP", 0xF08A2C)
+        case "tar":  return FileTypeIconStyle("TAR", "TAR", 0xE8A33D)
+        case "zst":  return FileTypeIconStyle("ZSTD", "ZST", 0xD96A3A)
+        case "gz":   return FileTypeIconStyle("GZIP", "GZ", 0xC97B3C)
+        case "tgz":  return FileTypeIconStyle("GZIP", "TGZ", 0xC97B3C)
+        case "bz2":  return FileTypeIconStyle("BZIP2", "BZ2", 0xE8823A)
+        case "tbz", "tbz2": return FileTypeIconStyle("BZIP2", "TBZ", 0xE8823A)
+        case "xz":   return FileTypeIconStyle("XZ", "XZ", 0xDDA23C)
+        case "txz":  return FileTypeIconStyle("XZ", "TXZ", 0xDDA23C)
+        case "lz":   return FileTypeIconStyle("LZIP", "LZ", 0xA85A28)
+        case "lz4":  return FileTypeIconStyle("LZ4", "LZ4", 0xD9924A)
+        case "br":   return FileTypeIconStyle("BROTLI", "BR", 0xE2772E)
+        case "lrz":  return FileTypeIconStyle("LRZIP", "LRZ", 0x9C5424)
+        case "aar":  return FileTypeIconStyle("AAR", "AAR", 0xB0602C)
+        case "sz":   return FileTypeIconStyle("SNAPPY", "SN", 0xC9A24A)
+        case "wim":  return FileTypeIconStyle("WIM", "WIM", 0xB06A32)
+        case "dmg":  return FileTypeIconStyle("DMG", "DMG", 0x4A4E57, isDisc: true)
+        case "iso":  return FileTypeIconStyle("ISO", "ISO", 0x6A707A, isDisc: true)
         default:     return nil
         }
     }

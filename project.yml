@@ -28,8 +28,6 @@ targets:
       - path: Resources
         includes:
           - "*.lproj/**"
-      - path: Resources/FileIcons
-        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dengpeng.AZipCore
@@ -46,6 +44,8 @@ targets:
         includes:
           - "*.lproj/**"
       - path: Resources/FileIcons
+        buildPhase: resources
+      - path: Resources/FileTypePNG
         buildPhase: resources
     dependencies:
       - target: AZipCore
