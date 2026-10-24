@@ -27,7 +27,7 @@ public enum ArchiveExtractor {
 
     /// 可交给 `bsdtar` 处理的扩展名。
     public static let supportedExtensions: Set<String> = [
-        "zip", "tar", "gz", "tgz", "bz2", "tbz", "tbz2",
+        "zip", "apk", "tar", "gz", "tgz", "bz2", "tbz", "tbz2",
         "xz", "txz", "7z", "rar", "iso", "zst", "lz4"
     ]
 

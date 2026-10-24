@@ -21,6 +21,7 @@ struct FileTypeIconStyle: Sendable {
         case "7z":   return FileTypeIconStyle("7Z", "7Z", 0xB5652A)
         case "rar":  return FileTypeIconStyle("RAR", "RAR", 0x9A4E2A)
         case "zip":  return FileTypeIconStyle("ZIP", "ZIP", 0xF08A2C)
+        case "apk":  return FileTypeIconStyle("APK", "APK", 0x3D8B4F)
         case "tar":  return FileTypeIconStyle("TAR", "TAR", 0xE8A33D)
         case "zst":  return FileTypeIconStyle("ZSTD", "ZST", 0xD96A3A)
         case "gz":   return FileTypeIconStyle("GZIP", "GZ", 0xC97B3C)
