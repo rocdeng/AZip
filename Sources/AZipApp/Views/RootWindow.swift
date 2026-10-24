@@ -220,10 +220,19 @@ struct RootWindow: View {
         switch model.state {
         case .idle:
             if model.launchedWithFile {
-                // 文件会话已结束（取消密码、卸载完成等）：直接退出，不回落设置。
+                // 文件会话已结束（取消密码、卸载完成等）：退出，不回落设置。
+                // 若存在错误提示，先停留片刻让用户看到，再退出。
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .onAppear { NSApp.terminate(nil) }
+                    .onAppear {
+                        let hasBanner = model.banner != nil
+                        Task { @MainActor in
+                            try? await Task.sleep(
+                                for: .seconds(hasBanner ? 2.0 : 0.15)
+                            )
+                            NSApp.terminate(nil)
+                        }
+                    }
             } else {
                 AssociationSettingsPane()
             }
