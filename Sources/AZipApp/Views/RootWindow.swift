@@ -12,24 +12,20 @@ struct RootWindow: View {
         // 毛玻璃由 `WindowConfigurator` 在 AppKit 层铺满整个窗口；
         // 这里不再放任何不透明或材质背景，否则会盖住底层的 behindWindow 模糊。
         Group {
-            if let job = archive.job {
-                ExtractView(session: archive, job: job)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // 解压进度只由独立浮窗展示，主窗口内不再挂第二份。
+            if isIdle {
+                content
             } else {
-                if isIdle {
-                    content
-                } else {
-                    // DMG 背景图有固定内在尺寸，会把 VStack 撑高、把安装栏顶出窗口；
-                    // 这里用 GeometryReader 显式分配：按钮栏固定高度，内容区吃剩余空间。
-                    GeometryReader { proxy in
-                        VStack(spacing: 0) {
-                            content
-                                .padding(.top, DMGSessionModel.titleBarInset)
-                                .frame(height: max(160, proxy.size.height - Self.bottomBarHeight))
-                                .clipped()
-                            BottomBar(model: model)
-                                .frame(height: Self.bottomBarHeight)
-                        }
+                // DMG 背景图有固定内在尺寸，会把 VStack 撑高、把安装栏顶出窗口；
+                // 这里用 GeometryReader 显式分配：按钮栏固定高度，内容区吃剩余空间。
+                GeometryReader { proxy in
+                    VStack(spacing: 0) {
+                        content
+                            .padding(.top, DMGSessionModel.titleBarInset)
+                            .frame(height: max(160, proxy.size.height - Self.bottomBarHeight))
+                            .clipped()
+                        BottomBar(model: model)
+                            .frame(height: Self.bottomBarHeight)
                     }
                 }
             }

@@ -623,6 +623,11 @@ final class DMGSessionModel: ObservableObject {
         }
     }
 
+    /// 新会话开始时清掉上一轮的提示（例如「已安装 Xxx」）。
+    func clearBanner() {
+        banner = nil
+    }
+
     /// 用户点击浮窗的取消按钮。
     func cancelInstall() {
         installCancelFlag.set()
