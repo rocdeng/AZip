@@ -577,6 +577,8 @@ final class DMGSessionModel: ObservableObject {
                     // 安装与卸载都已完成：浮窗显示完成，短暂停留后退出，
                     // 不再把主窗口切回设置界面。
                     self.updateInstallPanel(appURL: appURL, progress: 1, finished: true)
+                    // 与系统拷贝完成后一致的提示音。
+                    NSSound(named: NSSound.Name("Funk"))?.play()
                     self.mount = nil
                     self.rootEntries = []
                     self.navigationStack = []
