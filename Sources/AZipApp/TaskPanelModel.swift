@@ -25,12 +25,6 @@ final class TaskPanelModel: ObservableObject {
     @Published private(set) var state: TaskPanelState?
 
     func update(_ state: TaskPanelState?) {
-        let line = "update: \(state?.title ?? "nil") progress=\(state?.progress ?? -1)\n"
-        if let handle = FileHandle(forWritingAtPath: "/tmp/azip-panel.log") {
-            handle.seekToEndOfFile(); handle.write(Data(line.utf8)); handle.closeFile()
-        } else {
-            try? line.write(toFile: "/tmp/azip-panel.log", atomically: true, encoding: .utf8)
-        }
         self.state = state
     }
 }
