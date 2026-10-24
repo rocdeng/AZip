@@ -477,15 +477,24 @@ git commit -m "feat(core): 添加带超时的子进程执行器"
 </plist>
 ```
 
-在 `project.yml` 的 `AZipCoreTests` target 里补上资源声明：
+把 `project.yml` 中的 `AZipCoreTests` target 整块替换为（新增了 `excludes` 与 `resources`，让 fixture 作为 bundle 资源被测试读取）：
 
 ```yaml
+  AZipCoreTests:
+    type: bundle.unit-test
+    platform: macOS
     sources:
       - path: Tests/AZipCoreTests
         excludes:
           - "Fixtures/**"
     resources:
       - path: Tests/AZipCoreTests/Fixtures
+    dependencies:
+      - target: AZipCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dengpeng.AZipCoreTests
+        GENERATE_INFOPLIST_FILE: YES
 ```
 
 - [ ] **Step 2: 写失败测试**

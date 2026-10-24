@@ -6,3 +6,5 @@ DerivedData/
 *.xcworkspace/
 xcuserdata/
 *.xcuserstate
+Resources/Info.plist
+.serena/
