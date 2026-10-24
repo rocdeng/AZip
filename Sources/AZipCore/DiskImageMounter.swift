@@ -19,6 +19,7 @@ public enum MountError: Error, Sendable {
 
 public enum DiskImageMounter {
     private static let hdiutil = "/usr/bin/hdiutil"
+    private static let diskutil = "/usr/sbin/diskutil"
 
     /// 是否为加密映像（需要密码才能挂载）。
     public static func isEncrypted(_ dmgURL: URL) async -> Bool {
@@ -31,17 +32,16 @@ public enum DiskImageMounter {
     }
 
     public static func attach(_ dmgURL: URL, password: String? = nil) async throws -> MountResult {
+        // macOS 26 起 `hdiutil attach` 已弃用，官方替代是 `diskutil image attach`；
+        // 后者也支持从 stdin 读取口令，避免弹出系统密码框。
         var arguments = [
-            "attach", dmgURL.path, "-plist", "-nobrowse", "-noautoopen", "-readonly", "-noverify"
+            "image", "attach", dmgURL.path, "--plist", "--readOnly", "--nobrowse"
         ]
         if password != nil {
-            // 由 stdin 提供口令，避免 hdiutil 弹系统密码框。
-            arguments.append("-stdinpass")
+            arguments.append("--stdinpass")
         }
         let result = try await ProcessRunner.run(
-            hdiutil,
-            // `-noverify` 跳过整卷校验和：macOS 双击挂载同样不校验，
-            // 加上它才能做到接近系统原生速度（大 dmg 校验要几十秒）。
+            diskutil,
             arguments,
             standardInput: password.map { $0 + "\n" },
             timeoutSeconds: 120
@@ -109,8 +109,10 @@ public enum DiskImageMounter {
         for entity in entities {
             guard
                 let mountPoint = entity["mount-point"] as? String,
-                let deviceEntry = entity["dev-entry"] as? String
+                let rawEntry = entity["dev-entry"] as? String
             else { continue }
+            // diskutil 返回 "disk8s1"，hdiutil 返回 "/dev/disk8s1"；统一成后者。
+            let deviceEntry = rawEntry.hasPrefix("/") ? rawEntry : "/dev/" + rawEntry
             let volumeName = (entity["volume-name"] as? String)
                 ?? URL(fileURLWithPath: mountPoint).lastPathComponent
             return MountResult(

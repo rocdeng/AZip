@@ -6,9 +6,9 @@ struct AZipApp: App {
     @StateObject private var model = DMGSessionModel.shared
 
     var body: some Scene {
-        // 单例窗口：`WindowGroup` 会实例化多个窗口，而它们共享同一个
-        // `DMGSessionModel.shared`，关掉任一个都会卸载别的窗口正在用的卷。
-        Window("AZip", id: "main") {
+        // 用 `WindowGroup` 才能稳定创建窗口（单例 `Window` 在部分系统上启动不建窗）。
+        // 「新建窗口」命令已被移除，因此仍然只有一个主窗口。
+        WindowGroup("AZip") {
             RootWindow(model: model)
                 .id(model.language)
                 .environment(\.locale, model.language.locale)

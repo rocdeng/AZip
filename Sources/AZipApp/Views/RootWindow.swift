@@ -45,10 +45,16 @@ struct RootWindow: View {
                     }
                 },
                 onWindowClose: {
-                    // `closeSession` 是 async：关窗时在任务里等待卸载完成（对应 spec 7.3）。
-                    // 用真实窗口关闭事件而不是 `onDisappear`：SwiftUI 启动时会重建根视图，
-                    // `onDisappear` 会在挂载完成前误触发并作废会话令牌。
-                    Task { await model.closeSession() }
+                    // SwiftUI 在打开文件等场景会重建窗口，此时也会收到 willClose。
+                    // 延迟一拍再判断：若已有新的可见主窗口，说明只是重建，不能卸载卷。
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        let hasVisibleMain = NSApp.windows.contains {
+                            $0.identifier?.rawValue == "AZipMainWindow" && $0.isVisible
+                        }
+                        guard !hasVisibleMain else { return }
+                        await model.closeSession()
+                    }
                 },
                 shouldClose: {
                     // 安装期间关窗会中断 ditto 并从源卷卸载，留下暂存残片。
