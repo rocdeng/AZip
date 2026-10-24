@@ -578,7 +578,7 @@ final class DMGSessionModel: ObservableObject {
                     // 不再把主窗口切回设置界面。
                     self.updateInstallPanel(appURL: appURL, progress: 1, finished: true)
                     // 与系统拷贝完成后一致的提示音。
-                    NSSound(named: NSSound.Name("Funk"))?.play()
+                    NSSound(named: NSSound.Name("Submarine"))?.play()
                     self.mount = nil
                     self.rootEntries = []
                     self.navigationStack = []
