@@ -124,6 +124,7 @@ final class ArchiveSession: ObservableObject {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
             guard let current = job, matches(current.phase) else { return }
+            _ = current
             job = nil
             ExtractionWindowController.shared.close()
             NSApp.terminate(nil)
