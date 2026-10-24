@@ -213,6 +213,36 @@ final class DMGWindowLayoutTests: XCTestCase {
         XCTAssertEqual(layout?.contentSize.height, 400)
     }
 
+    // MARK: - Background color normalization
+
+    func testNormalizesRGBComponentsByAddingOpaqueAlpha() {
+        XCTAssertEqual(
+            DMGWindowLayout.normalizedBackgroundColor([0.1, 0.2, 0.3]),
+            [0.1, 0.2, 0.3, 1]
+        )
+    }
+
+    func testKeepsRGBAComponentsAsIs() {
+        XCTAssertEqual(
+            DMGWindowLayout.normalizedBackgroundColor([0.1, 0.2, 0.3, 0.4]),
+            [0.1, 0.2, 0.3, 0.4]
+        )
+    }
+
+    func testNormalizesLegacySixComponentsUsingFirstThreeAsOpaque() {
+        XCTAssertEqual(
+            DMGWindowLayout.normalizedBackgroundColor([0.1, 0.2, 0.3, 0.9, 0.8, 0.7]),
+            [0.1, 0.2, 0.3, 1]
+        )
+    }
+
+    func testRejectsUnsupportedComponentCounts() {
+        XCTAssertNil(DMGWindowLayout.normalizedBackgroundColor([]))
+        XCTAssertNil(DMGWindowLayout.normalizedBackgroundColor([0.1]))
+        XCTAssertNil(DMGWindowLayout.normalizedBackgroundColor([0.1, 0.2]))
+        XCTAssertNil(DMGWindowLayout.normalizedBackgroundColor([0.1, 0.2, 0.3, 0.4, 0.5]))
+    }
+
     // MARK: - Helpers
 
     /// 创建仅由本测试使用、仅由本测试删除的外部临时目录。

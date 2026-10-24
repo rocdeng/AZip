@@ -56,13 +56,14 @@ struct LayoutContentView: View {
 
     @ViewBuilder
     private var backgroundColor: some View {
-        if let components = layout.backgroundColor, components.count >= 4 {
+        if let components = layout.backgroundColor,
+           let rgba = DMGWindowLayout.normalizedBackgroundColor(components) {
             Color(
                 .sRGB,
-                red: components[0],
-                green: components[1],
-                blue: components[2],
-                opacity: components[3]
+                red: rgba[0],
+                green: rgba[1],
+                blue: rgba[2],
+                opacity: rgba[3]
             )
         } else {
             Color.clear

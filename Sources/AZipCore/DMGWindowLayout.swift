@@ -42,6 +42,23 @@ public struct DMGWindowLayout: Sendable {
 
     // MARK: - Background
 
+    /// 把 `.DS_Store` 的背景色分量归一化为 RGBA。
+    ///
+    /// 真实文件给出 3 个 RGB 分量；这里补上不透明 alpha 后交给渲染层。
+    /// 6 个分量是旧版解析器把 RGBA 拆成两半的遗留形态，沿用前三个分量并视为不透明。
+    public static func normalizedBackgroundColor(_ components: [CGFloat]) -> [CGFloat]? {
+        switch components.count {
+        case 3:
+            return [components[0], components[1], components[2], 1]
+        case 4:
+            return components
+        case 6:
+            return [components[0], components[1], components[2], 1]
+        default:
+            return nil
+        }
+    }
+
     public static func resolveBackgroundImage(
         mountPoint: URL,
         document: DSStoreDocument

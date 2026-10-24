@@ -6,7 +6,9 @@ struct AZipApp: App {
     @StateObject private var model = DMGSessionModel.shared
 
     var body: some Scene {
-        WindowGroup("AZip") {
+        // 单窗口：`WindowGroup` 的 ⌘N「新建窗口」会让两个窗口共享同一个
+        // `DMGSessionModel.shared`，关闭任一个都会卸载另一个正在使用的卷。
+        Window("AZip", id: "main") {
             RootWindow(model: model)
         }
         .windowStyle(.hiddenTitleBar)
@@ -18,6 +20,7 @@ struct AZipApp: App {
                     }
                 }
                 .keyboardShortcut("o")
+                .disabled(model.isInstalling)
             }
         }
 

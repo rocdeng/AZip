@@ -99,7 +99,7 @@ struct RootWindow: View {
     private var content: some View {
         switch model.state {
         case .idle:
-            placeholder("把 .dmg 文件拖到这里，或按 ⌘O 打开")
+            placeholder("双击 .dmg 文件，或按 ⌘O 打开")
         case .mounting:
             ProgressView("正在挂载…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -33,17 +33,37 @@ public enum DiskImageMounter {
     }
 
     public static func detach(_ result: MountResult) async throws {
-        let plain = try await ProcessRunner.run(
-            hdiutil, ["detach", result.deviceEntry], timeoutSeconds: 30
-        )
-        if plain.status == 0 { return }
-
-        let forced = try await ProcessRunner.run(
-            hdiutil, ["detach", result.deviceEntry, "-force"], timeoutSeconds: 30
-        )
-        if forced.status != 0 {
-            throw MountError.toolFailed(code: forced.status, message: forced.stderr)
+        // 首次尝试无论是非零退出还是抛出（例如超时），都视为失败并继续尝试 `-force`；
+        // 否则卷正忙时普通退出超时会让强制退出永远没有机会执行。
+        let firstFailure: String
+        do {
+            let plain = try await ProcessRunner.run(
+                hdiutil, ["detach", result.deviceEntry], timeoutSeconds: 30
+            )
+            if plain.status == 0 { return }
+            firstFailure = "退出码 \(plain.status)：\(plain.stderr)"
+        } catch {
+            firstFailure = "\(error)"
         }
+
+        let forcedFailure: String
+        let forcedStatus: Int32
+        do {
+            let forced = try await ProcessRunner.run(
+                hdiutil, ["detach", result.deviceEntry, "-force"], timeoutSeconds: 30
+            )
+            if forced.status == 0 { return }
+            forcedStatus = forced.status
+            forcedFailure = "退出码 \(forced.status)：\(forced.stderr)"
+        } catch {
+            forcedStatus = -1
+            forcedFailure = "\(error)"
+        }
+
+        throw MountError.toolFailed(
+            code: forcedStatus,
+            message: "普通退出失败（\(firstFailure)）；强制退出失败（\(forcedFailure)）"
+        )
     }
 
     public static func parseAttachOutput(_ data: Data) throws -> MountResult {

@@ -57,6 +57,8 @@ final class DMGSessionModel: ObservableObject {
     /// 安装成功后退出源卷的任务；退出流程据此等待卸载完成。
     /// 返回值为卸载错误：nil 表示已卸载，非 nil 表示失败、卷仍挂载。
     private var detachTask: Task<Error?, Never>?
+    /// 打开新映像时未能退出的旧卷；下次打开/关闭时重试卸载，避免卷永久悬挂。
+    private var orphanedMounts: [MountResult] = []
     /// 安装是否仍在进行（含安装成功后的卸载阶段）。
     /// 安装状态的单一事实来源：不能用 `state` 推断，因为卸载期间必须保持安装态，
     /// 否则会出现“安装按钮可点、⌘Q 可退出、可切换磁盘映像”的竞态。
@@ -182,10 +184,26 @@ final class DMGSessionModel: ObservableObject {
     private func performOpen(_ dmgURL: URL, token: UUID) async {
         guard token == sessionToken else { return }
 
+        // 上次打开时未能退出的卷：先重试一次，成功则不再保留。
+        if !orphanedMounts.isEmpty {
+            await retryOrphanedMounts()
+            guard token == sessionToken else { return }
+        }
+
         // 只退出本次操作开始时捕获的那个卷，绝不退出“当前 mount”指向的其他会话卷。
         if let previousMount = mount {
             mount = nil
-            try? await DiskImageMounter.detach(previousMount)
+            do {
+                try await DiskImageMounter.detach(previousMount)
+            } catch {
+                // 保留引用，下次打开/关闭时重试；不能静默丢弃，否则卷永久悬挂。
+                orphanedMounts.append(previousMount)
+                guard token == sessionToken else { return }
+                banner = BannerMessage(
+                    text: "无法推出上一个磁盘映像：\(describe(error))。将在下次打开或关闭时重试。",
+                    isError: true
+                )
+            }
             guard token == sessionToken else { return }
         }
 
@@ -201,7 +219,13 @@ final class DMGSessionModel: ObservableObject {
             }
             mount = result
 
-            let document = readDSStore(at: result.mountPoint)
+            let document = await Self.loadDocument(at: result.mountPoint)
+            guard token == sessionToken else {
+                // 读取期间会话已被取代（例如关闭）：退出自己刚挂载的卷后返回。
+                if mount == result { mount = nil }
+                try? await DiskImageMounter.detach(result)
+                return
+            }
             let parsedLayout = DMGWindowLayout.make(mountPoint: result.mountPoint, document: document)
             let entries = try VolumeScanner.scan(directory: result.mountPoint)
 
@@ -402,6 +426,13 @@ final class DMGSessionModel: ObservableObject {
     /// 关闭当前会话：重置全部会话状态并退出本次会话挂载的卷。
     /// 由应用层在窗口关闭 / 进程终止时 `await` 调用。
     func closeSession() async {
+        // 安装期间关闭会话会中断 ditto 并从源卷卸载，留下暂存残片。
+        // 调用方已有守卫，这里再兜底一次，防止新的调用路径绕过检查。
+        guard !isInstallInFlight else {
+            warnInstallInProgress()
+            return
+        }
+
         // 已有收尾在进行时 join 它，绝不另起一份提前返回：退出流程必须等到
         // detach 真正完成才能回复系统，否则进程会在卷卸载前退出。
         if let existing = teardownTask {
@@ -464,13 +495,17 @@ final class DMGSessionModel: ObservableObject {
             openTask = nil
         }
 
-        guard let mountedVolume else { return }
-        do {
-            try await DiskImageMounter.detach(mountedVolume)
-        } catch {
-            guard token == sessionToken else { return }
-            banner = BannerMessage(text: "无法推出磁盘映像：\(describe(error))", isError: true)
+        if let mountedVolume {
+            do {
+                try await DiskImageMounter.detach(mountedVolume)
+            } catch {
+                guard token == sessionToken else { return }
+                banner = BannerMessage(text: "无法推出磁盘映像：\(describe(error))", isError: true)
+            }
         }
+
+        // 顺带重试此前未能退出的卷。
+        await retryOrphanedMounts()
     }
 
     private func leaveInstallingIfNeeded() {
@@ -481,10 +516,41 @@ final class DMGSessionModel: ObservableObject {
 
     // MARK: - Helpers
 
-    private func readDSStore(at mountPoint: URL) -> DSStoreDocument {
+    /// 在 MainActor 之外读取并解析 `.DS_Store`。
+    ///
+    /// 恶意 dmg 可以把 `.DS_Store` 放成 FIFO 或超大文件：对 FIFO 的 `open(2)` 会永久阻塞，
+    /// 因此先用资源值确认是普通文件且大小有界，再把读 I/O 放到协作线程池执行。
+    nonisolated static func loadDocument(at mountPoint: URL) async -> DSStoreDocument {
+        // 超过 8 MiB 视为恶意/异常，直接忽略。
+        let maximumDSStoreSize = 8 * 1024 * 1024
         let url = mountPoint.appendingPathComponent(".DS_Store")
+        guard let values = try? url.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .totalFileSizeKey]
+        ),
+            values.isRegularFile == true,
+            values.isSymbolicLink != true,
+            let size = values.fileSize ?? values.totalFileSize,
+            size >= 0,
+            size <= maximumDSStoreSize else {
+            return DSStoreDocument()
+        }
+
         guard let data = try? Data(contentsOf: url) else { return DSStoreDocument() }
         return DSStoreReader.parse(data)
+    }
+
+    /// 重试卸载上次打开时未能退出的卷；仍失败的继续保留。
+    private func retryOrphanedMounts() async {
+        guard !orphanedMounts.isEmpty else { return }
+        var remaining: [MountResult] = []
+        for orphan in orphanedMounts {
+            do {
+                try await DiskImageMounter.detach(orphan)
+            } catch {
+                remaining.append(orphan)
+            }
+        }
+        orphanedMounts = remaining
     }
 
     private func resizeWindow(to size: CGSize) {
