@@ -9,7 +9,17 @@ struct BottomBar: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        ZStack {
+            HStack {
+                BackForwardControl(
+                    canGoBack: model.canGoBack,
+                    canGoForward: model.canGoForward,
+                    onBack: { model.goBack() },
+                    onForward: { model.goForward() }
+                )
+                Spacer()
+            }
+
             Button {
                 if let first = model.rootApplications.first {
                     model.requestInstall(first)
@@ -22,9 +32,9 @@ struct BottomBar: View {
             .keyboardShortcut("i", modifiers: [.command, .shift])
             .help(NSLocalizedString("把应用安装到「应用程序」文件夹", comment: ""))
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 10)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 
     private var label: some View {
@@ -80,22 +90,66 @@ struct BottomBar: View {
             .padding(.horizontal, 20)
             .padding(.top, 1)
     }
+}
 
-    private var statusText: String {
-        let count = model.rootApplications.count
-        switch count {
-        case 0:
-            return NSLocalizedString("此磁盘映像没有可安装的应用程序", comment: "")
-        case 1:
-            return String(
-                format: NSLocalizedString("可安装：%@", comment: ""),
-                model.rootApplications[0].name
-            )
-        default:
-            return String(
-                format: NSLocalizedString("%d 个应用程序可安装", comment: ""),
-                count
-            )
+/// 前进/后退玻璃胶囊：左半后退、右半前进，中间细分隔线。
+struct BackForwardControl: View {
+    let canGoBack: Bool
+    let canGoForward: Bool
+    let onBack: () -> Void
+    let onForward: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            item(systemName: "chevron.left", enabled: canGoBack, action: onBack)
+                .help(NSLocalizedString("后退", comment: ""))
+            Rectangle()
+                .fill(.white.opacity(0.22))
+                .frame(width: 1, height: 16)
+            item(systemName: "chevron.right", enabled: canGoForward, action: onForward)
+                .help(NSLocalizedString("前进", comment: ""))
         }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Capsule().fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                )
+        )
+        .overlay(
+            Capsule().strokeBorder(
+                LinearGradient(
+                    colors: [.white.opacity(0.85), .white.opacity(0.16)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 1
+            )
+        )
+        .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+    }
+
+    private func item(
+        systemName: String,
+        enabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 30, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(enabled ? Color.primary : Color.secondary.opacity(0.35))
+        .disabled(!enabled)
     }
 }

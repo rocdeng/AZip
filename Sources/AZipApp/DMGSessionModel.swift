@@ -50,6 +50,13 @@ final class DMGSessionModel: ObservableObject {
     @Published private(set) var mount: MountResult?
     @Published private(set) var dmgName: String = "AZip"
     @Published private(set) var navigationStack: [URL] = []
+
+    /// 浏览历史（绝对路径），供前进/后退使用。
+    private var history: [URL] = []
+    private var historyIndex: Int = -1
+
+    var canGoBack: Bool { historyIndex > 0 }
+    var canGoForward: Bool { historyIndex >= 0 && historyIndex < history.count - 1 }
     @Published var banner: BannerMessage?
     @Published var showAssociationSheet = false
     @Published var pendingApps: AppSelection?
@@ -294,6 +301,8 @@ final class DMGSessionModel: ObservableObject {
 
             rootEntries = entries
             layout = parsedLayout
+            history = [result.mountPoint]
+            historyIndex = 0
             state = .browsing(entries: entries, layout: parsedLayout)
 
             if let parsedLayout {
@@ -347,32 +356,76 @@ final class DMGSessionModel: ObservableObject {
 
     private func performEnter(_ url: URL, token: UUID) async {
         guard token == sessionToken else { return }
-        do {
-            let entries = try VolumeScanner.scan(directory: url)
-            guard token == sessionToken else { return }
-            navigationStack.append(url)
-            state = .browsing(entries: entries, layout: nil)
-        } catch {
-            guard token == sessionToken else { return }
-            banner = BannerMessage(
-                text: NSLocalizedString("无法打开文件夹", comment: ""),
-                isError: true
-            )
-        }
+        loadDirectory(url, recordHistory: true)
     }
 
     func goUp() {
-        // 安装期间禁止导航：`reloadCurrent` 会把状态从 `.installing` 拉回 `.browsing`，
+        // 安装期间禁止导航：导航会把状态从 `.installing` 拉回 `.browsing`，
         // 让安装按钮在 ditto 仍在运行时重新可用。
-        guard !isInstallInFlight, !navigationStack.isEmpty else { return }
-        navigationStack.removeLast()
-        reloadCurrent()
+        guard !isInstallInFlight, let current = currentDirectory, let mount else { return }
+        let parent = current.deletingLastPathComponent()
+        guard parent.path.hasPrefix(mount.mountPoint.path) else { return }
+        loadDirectory(parent, recordHistory: true)
     }
 
     func goBackToRoot() {
-        guard !isInstallInFlight else { return }
-        navigationStack.removeAll()
-        reloadCurrent()
+        guard !isInstallInFlight, let mount else { return }
+        loadDirectory(mount.mountPoint, recordHistory: true)
+    }
+
+    func goBack() {
+        guard !isInstallInFlight, canGoBack else { return }
+        historyIndex -= 1
+        loadDirectory(history[historyIndex], recordHistory: false)
+    }
+
+    func goForward() {
+        guard !isInstallInFlight, canGoForward else { return }
+        historyIndex += 1
+        loadDirectory(history[historyIndex], recordHistory: false)
+    }
+
+    private func recordHistory(_ url: URL) {
+        if historyIndex >= 0, historyIndex < history.count - 1 {
+            history.removeSubrange((historyIndex + 1)...)
+        }
+        if history.last == url {
+            historyIndex = history.count - 1
+            return
+        }
+        history.append(url)
+        historyIndex = history.count - 1
+    }
+
+    /// 加载目录并同步更新导航栈、历史与视图状态。
+    private func loadDirectory(_ url: URL, recordHistory shouldRecord: Bool) {
+        guard let mount, url.path.hasPrefix(mount.mountPoint.path) else { return }
+
+        var stack: [URL] = []
+        var cursor = url
+        while cursor.path != mount.mountPoint.path {
+            stack.insert(cursor, at: 0)
+            let parent = cursor.deletingLastPathComponent()
+            guard parent.path != cursor.path else { break }
+            cursor = parent
+        }
+        navigationStack = stack
+
+        do {
+            let entries = try VolumeScanner.scan(directory: url)
+            if url.path == mount.mountPoint.path {
+                rootEntries = entries
+                state = .browsing(entries: entries, layout: layout)
+            } else {
+                state = .browsing(entries: entries, layout: nil)
+            }
+            if shouldRecord { recordHistory(url) }
+        } catch {
+            banner = BannerMessage(
+                text: NSLocalizedString("无法读取目录", comment: ""),
+                isError: true
+            )
+        }
     }
 
     private func reloadCurrent() {
@@ -523,6 +576,8 @@ final class DMGSessionModel: ObservableObject {
     /// 由应用层在窗口关闭 / 进程终止时 `await` 调用。
     func closeSession() async {
         defer { removeNestedTemporaryCopy() }
+        history.removeAll()
+        historyIndex = -1
         // 安装期间关闭会话会中断 ditto 并从源卷卸载，留下暂存残片。
         // 调用方已有守卫，这里再兜底一次，防止新的调用路径绕过检查。
         guard !isInstallInFlight else {
