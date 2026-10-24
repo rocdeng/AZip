@@ -20,10 +20,18 @@ struct ExtractView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                ProgressView(value: job.progress)
-                    .progressViewStyle(.linear)
-                    .tint(Color.accentColor)
-                    .frame(maxWidth: .infinity)
+                // 系统线性进度条在毛玻璃上偏灰，这里自绘，颜色与轨道都可控。
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.14))
+                        Capsule()
+                            .fill(Color.accentColor)
+                            .frame(width: max(2, geometry.size.width * job.progress))
+                    }
+                }
+                .frame(height: 6)
+                .animation(.easeOut(duration: 0.2), value: job.progress)
 
                 Text(detail)
                     .font(.system(size: 10))
