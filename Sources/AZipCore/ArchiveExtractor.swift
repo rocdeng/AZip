@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 public enum ArchiveError: LocalizedError, Sendable {
     case unsupportedFormat(String)
@@ -70,8 +71,6 @@ public enum ArchiveExtractor {
             throw ArchiveError.destinationNotWritable(parent)
         }
 
-        let totalEntries = countEntries(inArchive: archiveURL)
-
         let process = Process()
         process.executableURL = URL(fileURLWithPath: bsdtar)
         process.arguments = [
@@ -80,37 +79,36 @@ public enum ArchiveExtractor {
             "--no-same-owner"
         ]
         let errorPipe = Pipe()
-        process.standardError = errorPipe
         process.standardOutput = FileHandle.nullDevice
+        process.standardError = errorPipe
 
         do {
             try process.run()
+            log("bsdtar started pid=\(process.processIdentifier)")
         } catch {
+            log("bsdtar launch failed: \(error)")
             throw ArchiveError.toolFailed(error.localizedDescription)
         }
 
+        // 不读子进程输出：管道在后台任务里容易造成死锁，
+        // 进度改用不确定动画在 UI 层展示。
         while process.isRunning {
             if isCancelled() {
                 process.terminate()
                 process.waitUntilExit()
                 throw ArchiveError.cancelled
             }
-            if totalEntries > 0 {
-                let done = countFileSystemEntries(in: destination)
-                progress(min(0.99, Double(done) / Double(totalEntries)))
-            }
-            try? await Task.sleep(for: .milliseconds(180))
+            try? await Task.sleep(for: .milliseconds(200))
         }
 
         let errorData = (try? errorPipe.fileHandleForReading.readToEnd()) ?? Data()
         let errorText = String(decoding: errorData, as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        log("bsdtar exit=\(process.terminationStatus) stderr=\(errorText.prefix(300))")
         guard process.terminationStatus == 0 else {
             throw ArchiveError.toolFailed(
-                errorText.isEmpty
-                    ? String(format: NSLocalizedString("bsdtar 退出码 %d", comment: ""), process.terminationStatus)
-                    : errorText
+                errorText.isEmpty ? "bsdtar 退出码 \(process.terminationStatus)" : errorText
             )
         }
         progress(1.0)
@@ -144,6 +142,12 @@ public enum ArchiveExtractor {
     }
 
     // MARK: - Helpers
+
+    private static let logger = Logger(subsystem: "com.dengpeng.AZip", category: "extract")
+
+    private static func log(_ line: String) {
+        logger.info("\(line, privacy: .public)")
+    }
 
     private static func countEntries(inArchive url: URL) -> Int {
         guard let output = try? runAndCapture("/usr/bin/bsdtar", ["-tf", url.path]) else {

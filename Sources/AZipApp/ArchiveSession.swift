@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import Foundation
 import SwiftUI
 import AZipCore
@@ -66,8 +67,10 @@ final class ArchiveSession: ObservableObject {
             url: url,
             progress: 0,
             detail: NSLocalizedString("准备中…", comment: ""),
-            finished: false
+            finished: false,
+            indeterminate: true
         )
+        startElapsedTimer(url: url)
 
         // 独立浮窗承载进度，主窗口先让位。
         let mainWindow = NSApp.windows.first {
@@ -75,14 +78,19 @@ final class ArchiveSession: ObservableObject {
         }
         ExtractionWindowController.shared.show(over: mainWindow)
 
-        Task {
+        // 必须脱离主 actor：解压循环里的目录统计是同步 I/O，
+        // 跑在 MainActor 上会把界面完全卡死（表现为一直停在「准备中」）。
+        let flag = cancelFlag
+        Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 try await ArchiveExtractor.extract(
                     archiveURL: url,
                     to: destination,
                     progress: { value in
-                        Task { @MainActor in
-                            guard var current = self.job else { return }
+                        // 用主队列派发而非 Task：解压结束时应用会很快退出，
+                        // 悬空的 MainActor Task 可能来不及执行，导致进度不动。
+                        DispatchQueue.main.async {
+                            guard let self, var current = self.job else { return }
                             current.progress = value
                             self.job = current
                             self.updatePanel(
@@ -96,36 +104,70 @@ final class ArchiveSession: ObservableObject {
                             )
                         }
                     },
-                    isCancelled: { [cancelFlag] in
-                        cancelFlag.isSet
-                    }
+                    isCancelled: { flag.isSet }
                 )
-                guard var current = job else { return }
-                current.progress = 1
-                current.phase = .finished(destination)
-                job = current
-                // 与安装完成使用同一个系统提示音。
-                NSSound(named: NSSound.Name("Submarine"))?.play()
-                scheduleTermination(after: 1.2) { if case .finished = $0 { return true }; return false }
 
-                // 用户显式勾选「解压后删除压缩包」时才动原文件，
-                // 且只移到废纸篓（可恢复），不做不可逆删除。
-                if UserDefaults.standard.bool(forKey: "deleteArchiveAfterExtraction") {
-                    var trashed: NSURL?
-                    try? FileManager.default.trashItem(
-                        at: url,
-                        resultingItemURL: &trashed
-                    )
+                await MainActor.run {
+                    guard let self, var current = self.job else { return }
+                    current.progress = 1
+                    current.phase = .finished(destination)
+                    self.job = current
+                    self.elapsedTask?.cancel()
+                    NSSound(named: NSSound.Name("Submarine"))?.play()
+                    self.scheduleTermination(after: 1.2) {
+                        if case .finished = $0 { return true }
+                        return false
+                    }
+
+                    // 用户显式勾选「解压后删除压缩包」时才动原文件，
+                    // 且只移到废纸篓（可恢复），不做不可逆删除。
+                    if UserDefaults.standard.bool(forKey: "deleteArchiveAfterExtraction") {
+                        var trashed: NSURL?
+                        try? FileManager.default.trashItem(
+                            at: url,
+                            resultingItemURL: &trashed
+                        )
+                    }
                 }
             } catch {
-                guard var current = job else { return }
-                if case ArchiveError.cancelled = error {
-                    current.phase = .cancelled
-                    scheduleTermination(after: 0.6) { if case .cancelled = $0 { return true }; return false }
-                } else {
-                    current.phase = .failed(error.localizedDescription)
+                await MainActor.run {
+                    guard let self, var current = self.job else { return }
+                    if case ArchiveError.cancelled = error {
+                        current.phase = .cancelled
+                        self.scheduleTermination(after: 0.6) {
+                            if case .cancelled = $0 { return true }
+                            return false
+                        }
+                    } else {
+                        current.phase = .failed(error.localizedDescription)
+                    }
+                    self.job = current
                 }
-                job = current
+            }
+        }
+    }
+
+    private var elapsedTask: Task<Void, Never>?
+
+    /// 解压过程中每秒刷新「已用时间」，配合不确定进度条。
+    private func startElapsedTimer(url: URL) {
+        elapsedTask?.cancel()
+        elapsedTask = Task { @MainActor [weak self] in
+            var seconds = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, self.job != nil else { return }
+                seconds += 1
+                self.updatePanel(
+                    url: url,
+                    progress: 0,
+                    detail: String(
+                        format: NSLocalizedString("正在解压… 已用 %d 秒", comment: ""),
+                        seconds
+                    ),
+                    finished: false,
+                    indeterminate: true
+                )
             }
         }
     }
@@ -134,7 +176,17 @@ final class ArchiveSession: ObservableObject {
         cancelFlag.set()
     }
 
-    private func updatePanel(url: URL, progress: Double, detail: String, finished: Bool) {
+    private func updatePanel(
+        url: URL,
+        progress: Double,
+        detail: String,
+        finished: Bool,
+        indeterminate: Bool = false
+    ) {
+        let line = "panel p=\(Int(progress * 100))% \(detail)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/azip-extract.log") {
+            h.seekToEndOfFile(); h.write(Data(line.utf8)); h.closeFile()
+        }
         TaskPanelModel.shared.update(
             TaskPanelState(
                 kind: .extracting,
@@ -145,7 +197,8 @@ final class ArchiveSession: ObservableObject {
                 ),
                 detail: detail,
                 progress: progress,
-                isFinished: finished
+                isFinished: finished,
+                isIndeterminate: indeterminate
             )
         )
     }

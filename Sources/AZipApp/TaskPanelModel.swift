@@ -14,6 +14,8 @@ struct TaskPanelState: Identifiable, Sendable {
     let detail: String
     var progress: Double
     var isFinished: Bool = false
+    /// 无法精确计算进度时使用不确定动画。
+    var isIndeterminate: Bool = false
     /// 解压与安装都支持取消。
     var isCancellable: Bool { true }
 }

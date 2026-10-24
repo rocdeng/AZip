@@ -25,17 +25,24 @@ struct TaskPanelView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.primary.opacity(0.14))
-                        Capsule()
-                            .fill(Color.accentColor)
-                            .frame(width: max(2, geometry.size.width * state.progress))
+                if state.isIndeterminate && !state.isFinished {
+                    ProgressView()
+                        .progressViewStyle(.linear)
+                        .tint(Color.accentColor)
+                        .frame(height: 6)
+                } else {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.primary.opacity(0.14))
+                            Capsule()
+                                .fill(Color.accentColor)
+                                .frame(width: max(2, geometry.size.width * state.progress))
+                        }
                     }
+                    .frame(height: 6)
+                    .animation(.easeOut(duration: 0.2), value: state.progress)
                 }
-                .frame(height: 6)
-                .animation(.easeOut(duration: 0.2), value: state.progress)
 
                 Text(state.detail)
                     .font(.system(size: 10))
