@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import AZipCore
@@ -103,6 +104,8 @@ final class ArchiveSession: ObservableObject {
                 current.progress = 1
                 current.phase = .finished(destination)
                 job = current
+                // 与安装完成使用同一个系统提示音。
+                NSSound(named: NSSound.Name("Submarine"))?.play()
                 scheduleTermination(after: 1.2) { if case .finished = $0 { return true }; return false }
 
                 // 用户显式勾选「解压后删除压缩包」时才动原文件，
