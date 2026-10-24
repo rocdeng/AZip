@@ -35,9 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // 不随窗口关闭自动退出：解压完成回到设置页、或用户暂时关窗时，
-        // 进程保留在 Dock 里，下次双击文件可直接复用。⌘Q 仍走正常退出流程。
-        false
+        // 用户关掉主窗口即退出（设置窗口和 DMG 浏览共用一个主窗口）。
+        // 解压/安装的进度浮窗是独立窗口，其关闭不会触发这里。
+        true
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
