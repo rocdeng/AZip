@@ -243,7 +243,7 @@ final class ArchiveSession: ObservableObject {
             }
             self.job = nil
             ExtractionWindowController.shared.close()
-            NSApp.terminate(nil)
+            exit(0)
         }
     }
 

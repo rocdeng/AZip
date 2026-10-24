@@ -638,9 +638,8 @@ final class DMGSessionModel: ObservableObject {
                         try? await Task.sleep(for: .seconds(1.4))
                         TaskPanelModel.shared.update(nil)
                         ExtractionWindowController.shared.close()
-                        NSApp.terminate(nil)
-                        // 兜底：若终止被某处拦下，3 秒后强制退出，避免残留空窗口。
-                        try? await Task.sleep(for: .seconds(3))
+                        // 清理已完成（卷已卸载、浮窗已关），直接结束进程；
+                        // 走 NSApp.terminate 会卡在系统的终止协商里，留下无窗口的僵尸进程。
                         exit(0)
                     }
                 }
