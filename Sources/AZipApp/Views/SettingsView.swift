@@ -116,18 +116,19 @@ struct AssociationSettingsPane: View {
                 }
                 .controlSize(.small)
 
-                Button("关于 AZip") {
-                    showsAbout = true
-                }
-                .controlSize(.small)
-
                 if let message {
                     Text(message)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+
                 Spacer()
+
+                Button("关于 AZip") {
+                    showsAbout = true
+                }
+                .controlSize(.small)
             }
         }
         .padding(.horizontal, 22)
