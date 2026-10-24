@@ -19,15 +19,17 @@ struct RootWindow: View {
                 if isIdle {
                     content
                 } else {
-                    // 内容与底部安装栏上下排布：按钮占独立一条，不叠在 DMG 内容上。
-                    VStack(spacing: 0) {
-                        content
-                            .padding(.top, DMGSessionModel.titleBarInset)
-                            // DMG 背景图可能比窗口高，必须让内容区让出空间，
-                            // 否则会把底部安装栏挤出窗口。
-                            .frame(maxHeight: .infinity)
-                        BottomBar(model: model)
-                            .fixedSize(horizontal: false, vertical: true)
+                    // DMG 背景图有固定内在尺寸，会把 VStack 撑高、把安装栏顶出窗口；
+                    // 这里用 GeometryReader 显式分配：按钮栏固定高度，内容区吃剩余空间。
+                    GeometryReader { proxy in
+                        VStack(spacing: 0) {
+                            content
+                                .padding(.top, DMGSessionModel.titleBarInset)
+                                .frame(height: max(160, proxy.size.height - Self.bottomBarHeight))
+                                .clipped()
+                            BottomBar(model: model)
+                                .frame(height: Self.bottomBarHeight)
+                        }
                     }
                 }
             }
@@ -150,6 +152,8 @@ struct RootWindow: View {
         window.setContentSize(size)
         window.center()
     }
+
+    private static let bottomBarHeight: CGFloat = 70
 
     private var isIdle: Bool {
         if case .idle = model.state { return true }
