@@ -218,6 +218,7 @@ struct RootWindow: View {
             if model.launchedWithFile {
                 // 文件会话已结束（取消密码、卸载完成等）：退出，不回落设置。
                 // 若存在错误提示，先停留片刻让用户看到，再退出。
+                // 解压任务进行中时绝不能退出——压缩包会话不经过 model.state。
                 Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onAppear {
@@ -226,6 +227,7 @@ struct RootWindow: View {
                             try? await Task.sleep(
                                 for: .seconds(hasBanner ? 2.0 : 0.15)
                             )
+                            guard archive.job == nil else { return }
                             NSApp.terminate(nil)
                         }
                     }

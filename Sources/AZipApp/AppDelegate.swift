@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -44,6 +45,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let model = DMGSessionModel.shared
+        // 解压/排队进行中不允许退出，否则会丢掉后续任务。
+        if ArchiveSession.shared.job != nil {
+            return .terminateCancel
+        }
         // 安装期间退出会中断 ditto 并从源卷卸载，留下暂存残片，必须等安装完成。
         guard !model.isInstalling else {
             model.warnInstallInProgress()
