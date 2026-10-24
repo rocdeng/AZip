@@ -13,25 +13,25 @@ struct ExtractView: View {
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 64, height: 64)
+                    .frame(width: 56, height: 56)
                     .shadow(color: .black.opacity(0.12), radius: 5, y: 2)
 
                 Text(job.sourceURL.lastPathComponent)
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .frame(maxWidth: 320)
+                    .frame(maxWidth: 260)
 
                 ProgressView(value: job.progress)
                     .progressViewStyle(.linear)
                     .tint(Color.accentColor)
-                    .frame(width: 280)
+                    .frame(width: 240)
 
                 Text(detail)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .frame(maxWidth: 320)
+                    .frame(maxWidth: 260)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -47,10 +47,10 @@ struct ExtractView: View {
                     .foregroundStyle(.secondary.opacity(0.9))
             }
             .buttonStyle(.plain)
-            .padding(.top, 12)
-            .padding(.trailing, 12)
+            .padding(.top, 10)
+            .padding(.trailing, 10)
         }
-        .frame(width: 420, height: 240)
+        .frame(width: 380, height: 190)
     }
 
     private var isRunning: Bool {

@@ -35,8 +35,8 @@ struct RootWindow: View {
                 hidesWindowChrome: archive.job != nil,
                 onWindowReady: { window in
                     if archive.job != nil {
-                        window.setContentSize(NSSize(width: 420, height: 240))
-                        window.center()
+                        // 解压由独立浮窗承载，主窗口不露面。
+                        window.orderOut(nil)
                     } else if isIdle {
                         window.setContentSize(NSSize(width: 520, height: 600))
                         window.center()

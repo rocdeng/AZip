@@ -61,6 +61,12 @@ final class ArchiveSession: ObservableObject {
         cancelFlag.reset()
         job = ExtractionJob(sourceURL: url, destination: destination)
 
+        // 独立浮窗承载进度，主窗口先让位。
+        let mainWindow = NSApp.windows.first {
+            $0.identifier?.rawValue == "AZipMainWindow"
+        }
+        ExtractionWindowController.shared.show(over: mainWindow)
+
         Task {
             do {
                 try await ArchiveExtractor.extract(
@@ -81,7 +87,7 @@ final class ArchiveSession: ObservableObject {
                 current.progress = 1
                 current.phase = .finished(destination)
                 job = current
-                scheduleAutoDismiss(after: 1.2) { if case .finished = $0 { return true }; return false }
+                scheduleTermination(after: 1.2) { if case .finished = $0 { return true }; return false }
 
                 // 用户显式勾选「解压后删除压缩包」时才动原文件，
                 // 且只移到废纸篓（可恢复），不做不可逆删除。
@@ -96,7 +102,7 @@ final class ArchiveSession: ObservableObject {
                 guard var current = job else { return }
                 if case ArchiveError.cancelled = error {
                     current.phase = .cancelled
-                    scheduleAutoDismiss(after: 0.6) { if case .cancelled = $0 { return true }; return false }
+                    scheduleTermination(after: 0.6) { if case .cancelled = $0 { return true }; return false }
                 } else {
                     current.phase = .failed(error.localizedDescription)
                 }
@@ -110,7 +116,8 @@ final class ArchiveSession: ObservableObject {
     }
 
     /// 完成/取消后自动关闭浮窗；失败保留，让用户看到原因。
-    private func scheduleAutoDismiss(
+    /// 解压结束（成功或取消）后关闭浮窗并退出应用——AZip 此时只是解压工具。
+    private func scheduleTermination(
         after seconds: Double,
         matches: @escaping (ExtractionJob.Phase) -> Bool
     ) {
@@ -118,6 +125,8 @@ final class ArchiveSession: ObservableObject {
             try? await Task.sleep(for: .seconds(seconds))
             guard let current = job, matches(current.phase) else { return }
             job = nil
+            ExtractionWindowController.shared.close()
+            NSApp.terminate(nil)
         }
     }
 
@@ -128,6 +137,17 @@ final class ArchiveSession: ObservableObject {
             return
         }
         self.job = nil
+        ExtractionWindowController.shared.close()
+        exitIfNoVisibleMainWindow()
+    }
+
+    private func exitIfNoVisibleMainWindow() {
+        let hasVisibleMain = NSApp.windows.contains {
+            $0.identifier?.rawValue == "AZipMainWindow" && $0.isVisible
+        }
+        if !hasVisibleMain {
+            NSApp.terminate(nil)
+        }
     }
 
     func revealInFinder() {
