@@ -455,15 +455,56 @@ final class DMGSessionModel: ObservableObject {
 
     // MARK: - Install
 
-    /// 底部按钮触发：只有一个应用时直接装，多个时让用户选。
+    /// 底部按钮触发：优先按 DMG 文件名推断目标应用，推断不出才让用户选。
     func requestInstallFromBar() {
         guard !isInstallInFlight else { return }
         let candidates = rootApplications
-        if candidates.count > 1 {
-            pendingApps = AppSelection(entries: candidates)
-        } else if let first = candidates.first {
-            startInstall(first.url, overwrite: false)
+        switch candidates.count {
+        case 0:
+            return
+        case 1:
+            startInstall(candidates[0].url, overwrite: false)
+        default:
+            if let match = bestMatch(forDMGName: dmgName, among: candidates) {
+                startInstall(match.url, overwrite: false)
+            } else {
+                pendingApps = AppSelection(entries: candidates)
+            }
         }
+    }
+
+    /// 用 DMG 文件名匹配候选应用：完整包含优先，其次按词重叠；
+    /// 最高分并列或完全没有交集时返回 nil（交给用户选择）。
+    private func bestMatch(forDMGName dmgName: String, among apps: [VolumeEntry]) -> VolumeEntry? {
+        let base = (dmgName as NSString)
+            .deletingPathExtension
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+        let baseWords = Set(base.split(separator: " ").map(String.init))
+
+        var scored: [(app: VolumeEntry, score: Int)] = []
+        for app in apps {
+            let name = (app.name as NSString)
+                .deletingPathExtension
+                .lowercased()
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+            if base.contains(name), !name.isEmpty {
+                scored.append((app, 1000 + name.count))
+                continue
+            }
+            let words = Set(name.split(separator: " ").map(String.init))
+            let overlap = baseWords.intersection(words).count
+            if overlap > 0 {
+                scored.append((app, overlap))
+            }
+        }
+
+        scored.sort { $0.score > $1.score }
+        guard let best = scored.first else { return nil }
+        if scored.count > 1, scored[1].score == best.score { return nil }
+        return best.app
     }
 
     /// 由选择面板直接指定要安装的应用（不再重复弹面板）。
