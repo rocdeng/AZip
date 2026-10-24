@@ -8,7 +8,7 @@ final class ExtractionWindowController {
 
     private var panel: NSWindow?
 
-    private let panelSize = NSSize(width: 560, height: 118)
+    private let panelSize = NSSize(width: 380, height: 84)
 
     func show(over windowToHide: NSWindow? = nil) {
         windowToHide?.orderOut(nil)
@@ -79,6 +79,6 @@ struct ExtractionPanel: View {
                 Color.clear
             }
         }
-        .frame(width: 560, height: 118)
+        .frame(width: 380, height: 84)
     }
 }

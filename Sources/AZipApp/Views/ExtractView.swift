@@ -7,31 +7,30 @@ struct ExtractView: View {
     let job: ExtractionJob
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Image(nsImage: NSWorkspace.shared.icon(forFile: job.sourceURL.path))
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 52, height: 52)
+                .frame(width: 40, height: 40)
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
 
                 ProgressView(value: job.progress)
                     .progressViewStyle(.linear)
                     .tint(Color.accentColor)
-                    .frame(width: 300)
+                    .frame(maxWidth: .infinity)
 
                 Text(detail)
-                    .font(.system(size: 11))
+                    .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
-
-            Spacer(minLength: 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 if isRunning {
@@ -41,15 +40,15 @@ struct ExtractView: View {
                 }
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 21))
+                    .font(.system(size: 17))
                     .foregroundStyle(.secondary.opacity(0.85))
             }
             .buttonStyle(.plain)
             .help(isRunning ? "取消解压" : "关闭")
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .frame(width: 560, height: 118)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(width: 380, height: 84)
     }
 
     private var isRunning: Bool {
@@ -60,7 +59,7 @@ struct ExtractView: View {
     private var title: String {
         switch job.phase {
         case .running:
-            return "正在解压「\(job.sourceURL.lastPathComponent)」"
+            return "AZip - 正在解压缩 \(job.sourceURL.lastPathComponent)"
         case .finished:
             return "解压完成"
         case .cancelled:
