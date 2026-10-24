@@ -43,7 +43,11 @@ public enum DiskImageMounter {
                 hdiutil, ["detach", result.deviceEntry], timeoutSeconds: 30
             )
             if plain.status == 0 { return }
-            firstFailure = "退出码 \(plain.status)：\(plain.stderr)"
+            firstFailure = String(
+                format: NSLocalizedString("退出码 %d：%@", comment: ""),
+                plain.status,
+                plain.stderr
+            )
         } catch {
             firstFailure = "\(error)"
         }
@@ -56,7 +60,11 @@ public enum DiskImageMounter {
             )
             if forced.status == 0 { return }
             forcedStatus = forced.status
-            forcedFailure = "退出码 \(forced.status)：\(forced.stderr)"
+            forcedFailure = String(
+                format: NSLocalizedString("退出码 %d：%@", comment: ""),
+                forced.status,
+                forced.stderr
+            )
         } catch {
             forcedStatus = -1
             forcedFailure = "\(error)"
@@ -64,7 +72,11 @@ public enum DiskImageMounter {
 
         throw MountError.toolFailed(
             code: forcedStatus,
-            message: "普通退出失败（\(firstFailure)）；强制退出失败（\(forcedFailure)）"
+            message: String(
+                format: NSLocalizedString("普通退出失败（%@）；强制退出失败（%@）", comment: ""),
+                firstFailure,
+                forcedFailure
+            )
         )
     }
 

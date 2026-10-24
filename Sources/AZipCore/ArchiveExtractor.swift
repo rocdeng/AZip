@@ -9,13 +9,13 @@ public enum ArchiveError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .unsupportedFormat(ext):
-            return "暂不支持解压 .\(ext) 格式"
+            return String(format: NSLocalizedString("暂不支持解压 .%@ 格式", comment: ""), ext)
         case .destinationNotWritable:
-            return "没有权限写入解压目标文件夹"
+            return NSLocalizedString("没有权限写入解压目标文件夹", comment: "")
         case let .toolFailed(message):
-            return "解压失败：\(message)"
+            return String(format: NSLocalizedString("解压失败：%@", comment: ""), message)
         case .cancelled:
-            return "已取消解压"
+            return NSLocalizedString("已取消解压", comment: "")
         }
     }
 }
@@ -108,7 +108,9 @@ public enum ArchiveExtractor {
 
         guard process.terminationStatus == 0 else {
             throw ArchiveError.toolFailed(
-                errorText.isEmpty ? "bsdtar 退出码 \(process.terminationStatus)" : errorText
+                errorText.isEmpty
+                    ? String(format: NSLocalizedString("bsdtar 退出码 %d", comment: ""), process.terminationStatus)
+                    : errorText
             )
         }
         progress(1.0)

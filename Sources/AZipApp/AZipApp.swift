@@ -10,11 +10,13 @@ struct AZipApp: App {
         // `DMGSessionModel.shared`，关掉任一个都会卸载别的窗口正在用的卷。
         Window("AZip", id: "main") {
             RootWindow(model: model)
+                .id(model.language)
+                .environment(\.locale, model.language.locale)
         }
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("打开…") {
+                Button(NSLocalizedString("打开…", comment: "")) {
                     OpenPanel.openDMG { url in
                         if url.pathExtension.lowercased() == "dmg" {
                             model.open(dmgURL: url)
@@ -30,6 +32,8 @@ struct AZipApp: App {
 
         Settings {
             SettingsView()
+                .id(model.language)
+                .environment(\.locale, model.language.locale)
         }
     }
 }

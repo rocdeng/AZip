@@ -70,6 +70,7 @@ final class ExtractionWindowController {
 /// 浮窗内容：跟随 `ArchiveSession` 的状态刷新。
 struct ExtractionPanel: View {
     @ObservedObject private var session = ArchiveSession.shared
+    @ObservedObject private var model = DMGSessionModel.shared
 
     var body: some View {
         Group {
@@ -79,6 +80,8 @@ struct ExtractionPanel: View {
                 Color.clear
             }
         }
+        .id(model.language)
+        .environment(\.locale, model.language.locale)
         .frame(width: 380, height: 84)
     }
 }

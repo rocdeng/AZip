@@ -91,7 +91,11 @@ public enum AppInstaller {
             await progressTask.value
 
             guard copy.status == 0 else {
-                throw InstallError.copyFailed(copy.stderr.isEmpty ? "ditto 退出码 \(copy.status)" : copy.stderr)
+                throw InstallError.copyFailed(
+                    copy.stderr.isEmpty
+                        ? String(format: NSLocalizedString("ditto 退出码 %d", comment: ""), copy.status)
+                        : copy.stderr
+                )
             }
             progress(1.0)
 
@@ -147,8 +151,13 @@ public enum AppInstaller {
                 } catch let restoreError {
                     // 回滚也失败：保留备份并明确告知其绝对路径，便于用户找回旧版本。
                     throw InstallError.moveFailed(
-                        "无法安装到 \(finalURL.path)：\(error.localizedDescription)；"
-                            + "且无法从备份 \(backupURL.path) 回滚：\(restoreError.localizedDescription)"
+                        String(
+                            format: NSLocalizedString("无法安装到 %@：%@；且无法从备份 %@ 回滚：%@", comment: ""),
+                            finalURL.path,
+                            error.localizedDescription,
+                            backupURL.path,
+                            restoreError.localizedDescription
+                        )
                     )
                 }
             }

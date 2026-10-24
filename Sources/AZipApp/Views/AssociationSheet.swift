@@ -12,7 +12,7 @@ struct AssociationSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("关联文件格式")
+            Text(NSLocalizedString("关联文件格式", comment: ""))
                 .font(.system(size: 15, weight: .semibold))
 
             HStack(spacing: 12) {
@@ -21,7 +21,7 @@ struct AssociationSheet: View {
                     .frame(width: 36, height: 36)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("DMG 磁盘映像")
+                    Text(NSLocalizedString("DMG 磁盘映像", comment: ""))
                         .font(.system(size: 13))
                     Text(".dmg")
                         .font(.system(size: 11))
@@ -36,7 +36,7 @@ struct AssociationSheet: View {
             .padding(10)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
 
-            Text("勾选后，双击 .dmg 文件将由 AZip 打开。之后可在设置中修改。")
+            Text(NSLocalizedString("勾选后，双击 .dmg 文件将由 AZip 打开。之后可在设置中修改。", comment: ""))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -50,11 +50,11 @@ struct AssociationSheet: View {
 
             HStack {
                 Spacer()
-                Button("以后再说") {
+                Button(NSLocalizedString("以后再说", comment: "")) {
                     didOffer = true
                     dismiss()
                 }
-                Button("确认关联") {
+                Button(NSLocalizedString("确认关联", comment: "")) {
                     apply()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -77,7 +77,7 @@ struct AssociationSheet: View {
             didOffer = true
             dismiss()
         } catch {
-            errorText = "设置失败：\(error)"
+            errorText = String(format: NSLocalizedString("设置失败：%@", comment: ""), "\(error)")
         }
     }
 }

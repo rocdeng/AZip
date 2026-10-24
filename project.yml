@@ -4,6 +4,9 @@ options:
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
+  knownRegions:
+    - zh-Hans
+    - en
 
 settings:
   base:
@@ -22,6 +25,9 @@ targets:
     platform: macOS
     sources:
       - path: Sources/AZipCore
+      - path: Resources
+        includes:
+          - "*.lproj/**"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dengpeng.AZipCore
@@ -34,6 +40,9 @@ targets:
     platform: macOS
     sources:
       - path: Sources/AZipApp
+      - path: Resources
+        includes:
+          - "*.lproj/**"
     dependencies:
       - target: AZipCore
     info:
@@ -43,6 +52,9 @@ targets:
         CFBundleDisplayName: AZip
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleLocalizations:
+          - zh-Hans
+          - en
         LSMinimumSystemVersion: "14.0"
         NSHumanReadableCopyright: ""
         LSApplicationCategoryType: public.app-category.utilities

@@ -11,6 +11,7 @@ struct SettingsView: View {
 }
 
 struct AssociationSettingsPane: View {
+    @ObservedObject private var model = DMGSessionModel.shared
     @State private var states: [String: Bool] = [:]
     @State private var message: String?
     @State private var showsAbout = false
@@ -22,24 +23,24 @@ struct AssociationSettingsPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("文件关联")
+            Text(NSLocalizedString("文件关联", comment: ""))
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 22)
                 .padding(.top, 26)
                 .padding(.bottom, 8)
 
             VStack(spacing: 0) {
-                    ForEach(
-                        Array(FileAssociationService.supportedTypes.enumerated()),
-                        id: \.element.id
-                    ) { index, type in
-                        row(for: type)
-                        if index < FileAssociationService.supportedTypes.count - 1 {
-                            Divider()
-                                .opacity(0.12)
-                                .padding(.leading, 54)
-                        }
+                ForEach(
+                    Array(FileAssociationService.supportedTypes.enumerated()),
+                    id: \.element.id
+                ) { index, type in
+                    row(for: type)
+                    if index < FileAssociationService.supportedTypes.count - 1 {
+                        Divider()
+                            .opacity(0.12)
+                            .padding(.leading, 54)
                     }
+                }
             }
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -60,6 +61,11 @@ struct AssociationSettingsPane: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .sheet(isPresented: $showsAbout) {
             AboutView()
+                .id(model.language)
+                .environment(\.locale, model.language.locale)
+        }
+        .onChange(of: model.language) { _, _ in
+            message = nil
         }
         .onAppear(perform: refresh)
         .onReceive(
@@ -101,27 +107,50 @@ struct AssociationSettingsPane: View {
     }
 
     private var optionRow: some View {
-        Toggle("解压后删除压缩包", isOn: $deleteArchiveAfterExtraction)
+        HStack(spacing: 12) {
+            Toggle(
+                NSLocalizedString("解压后删除压缩包", comment: ""),
+                isOn: $deleteArchiveAfterExtraction
+            )
             .toggleStyle(.checkbox)
             .font(.system(size: 11))
-            .padding(.horizontal, 22)
-            .padding(.top, 10)
+
+            Spacer()
+
+            HStack(spacing: 6) {
+                Text(NSLocalizedString("界面语言", comment: ""))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+
+                Picker("", selection: $model.language) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .controlSize(.small)
+                .fixedSize()
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 10)
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("勾选后，双击对应文件将由 AZip 打开。")
+            Text(NSLocalizedString("勾选后，双击对应文件将由 AZip 打开。", comment: ""))
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
-                Button("全部关联") {
+                Button(NSLocalizedString("全部关联", comment: "")) {
                     associateAll()
                 }
                 .controlSize(.small)
 
-                Button("全部恢复为系统默认") {
+                Button(NSLocalizedString("全部恢复为系统默认", comment: "")) {
                     restoreAll()
                 }
                 .controlSize(.small)
@@ -135,7 +164,7 @@ struct AssociationSettingsPane: View {
 
                 Spacer()
 
-                Button("关于 AZip") {
+                Button(NSLocalizedString("关于 AZip", comment: "")) {
                     showsAbout = true
                 }
                 .controlSize(.small)
@@ -165,13 +194,22 @@ struct AssociationSettingsPane: View {
                 do {
                     if newValue {
                         try FileAssociationService.setDefault(bundleID: bundleID, for: type)
-                        message = "已将 \(type.label) 关联到 AZip"
+                        message = String(
+                            format: NSLocalizedString("已将 %@ 关联到 AZip", comment: ""),
+                            type.label
+                        )
                     } else {
                         try FileAssociationService.restoreSystemDefault(for: type)
-                        message = "已将 \(type.label) 恢复为系统默认"
+                        message = String(
+                            format: NSLocalizedString("已将 %@ 恢复为系统默认", comment: ""),
+                            type.label
+                        )
                     }
                 } catch {
-                    message = "设置失败：\(error.localizedDescription)"
+                    message = String(
+                        format: NSLocalizedString("设置失败：%@", comment: ""),
+                        error.localizedDescription
+                    )
                 }
                 refresh()
             }
@@ -195,9 +233,13 @@ struct AssociationSettingsPane: View {
                 failures.append(type.label)
             }
         }
+        let separator = NSLocalizedString("、", comment: "")
         message = failures.isEmpty
-            ? "已全部关联到 AZip"
-            : "以下格式关联失败：\(failures.joined(separator: "、"))"
+            ? NSLocalizedString("已全部关联到 AZip", comment: "")
+            : String(
+                format: NSLocalizedString("以下格式关联失败：%@", comment: ""),
+                failures.joined(separator: separator)
+            )
         refresh()
     }
 
@@ -210,9 +252,13 @@ struct AssociationSettingsPane: View {
                 failures.append(type.label)
             }
         }
+        let separator = NSLocalizedString("、", comment: "")
         message = failures.isEmpty
-            ? "已全部恢复为系统默认"
-            : "以下格式恢复失败：\(failures.joined(separator: "、"))"
+            ? NSLocalizedString("已全部恢复为系统默认", comment: "")
+            : String(
+                format: NSLocalizedString("以下格式恢复失败：%@", comment: ""),
+                failures.joined(separator: separator)
+            )
         refresh()
     }
 }

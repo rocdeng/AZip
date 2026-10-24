@@ -33,6 +33,13 @@ struct ConflictRequest: Identifiable, Sendable {
 final class DMGSessionModel: ObservableObject {
     static let shared = DMGSessionModel()
 
+    @Published var language: AppLanguage = AppLanguage.current {
+        didSet {
+            guard oldValue != language else { return }
+            AppLanguage.current = language
+        }
+    }
+
     @Published private(set) var state: SessionState = .idle
 
     @Published private(set) var mount: MountResult?
@@ -106,7 +113,10 @@ final class DMGSessionModel: ObservableObject {
 
     /// 安装期间拒绝退出/关窗时向用户说明原因。
     func warnInstallInProgress() {
-        banner = BannerMessage(text: "正在安装，请等待完成后再退出", isError: true)
+        banner = BannerMessage(
+            text: NSLocalizedString("正在安装，请等待完成后再退出", comment: ""),
+            isError: true
+        )
     }
 
     // MARK: - Lifecycle
@@ -131,7 +141,10 @@ final class DMGSessionModel: ObservableObject {
         let backups = AppInstaller.pendingBackups(in: URL(fileURLWithPath: "/Applications"))
         guard !backups.isEmpty else { return }
         banner = BannerMessage(
-            text: "上次安装未完成，旧版本备份位于：\(backups[0].path)",
+            text: String(
+                format: NSLocalizedString("上次安装未完成，旧版本备份位于：%@", comment: ""),
+                backups[0].path
+            ),
             isError: true
         )
     }
@@ -140,7 +153,10 @@ final class DMGSessionModel: ObservableObject {
         // 安装（含安装后的卸载）期间切换会话会卸载源卷，中断正在读取的复制，
         // 且安装任务的错误会因令牌过期被吞掉。此时直接拒绝，不碰令牌与挂载。
         guard !isInstallInFlight else {
-            banner = BannerMessage(text: "正在安装，请等待完成后再打开其他磁盘映像", isError: true)
+            banner = BannerMessage(
+                text: NSLocalizedString("正在安装，请等待完成后再打开其他磁盘映像", comment: ""),
+                isError: true
+            )
             return
         }
 
@@ -201,7 +217,10 @@ final class DMGSessionModel: ObservableObject {
                 orphanedMounts.append(previousMount)
                 guard token == sessionToken else { return }
                 banner = BannerMessage(
-                    text: "无法推出上一个磁盘映像：\(describe(error))。将在下次打开或关闭时重试。",
+                    text: String(
+                        format: NSLocalizedString("无法推出上一个磁盘映像：%@。将在下次打开或关闭时重试。", comment: ""),
+                        describe(error)
+                    ),
                     isError: true
                 )
             }
@@ -274,7 +293,10 @@ final class DMGSessionModel: ObservableObject {
             state = .browsing(entries: entries, layout: nil)
         } catch {
             guard token == sessionToken else { return }
-            banner = BannerMessage(text: "无法打开文件夹", isError: true)
+            banner = BannerMessage(
+                text: NSLocalizedString("无法打开文件夹", comment: ""),
+                isError: true
+            )
         }
     }
 
@@ -302,7 +324,10 @@ final class DMGSessionModel: ObservableObject {
             }
             state = .browsing(entries: entries, layout: activeLayout)
         } catch {
-            banner = BannerMessage(text: "无法读取目录", isError: true)
+            banner = BannerMessage(
+                text: NSLocalizedString("无法读取目录", comment: ""),
+                isError: true
+            )
         }
     }
 
@@ -366,7 +391,13 @@ final class DMGSessionModel: ObservableObject {
                     }
                 )
                 guard token == self.sessionToken else { return }
-                self.banner = BannerMessage(text: "已安装 \(installed.lastPathComponent)", isError: false)
+                self.banner = BannerMessage(
+                    text: String(
+                        format: NSLocalizedString("已安装 %@", comment: ""),
+                        installed.lastPathComponent
+                    ),
+                    isError: false
+                )
 
                 // 保持 `.installing` 与 `isInstalling == true` 直到卸载完成：
                 // 期间安装按钮保持禁用，⌘Q / 关窗 / 打开其他映像都会被拒绝。
@@ -395,7 +426,10 @@ final class DMGSessionModel: ObservableObject {
                 if let detachError {
                     // 卸载失败：保留 mount 以便后续收尾重试，而不是直接丢弃引用。
                     self.banner = BannerMessage(
-                        text: "已安装，但无法推出磁盘映像：\(self.describe(detachError))",
+                        text: String(
+                            format: NSLocalizedString("已安装，但无法推出磁盘映像：%@", comment: ""),
+                            self.describe(detachError)
+                        ),
                         isError: true
                     )
                     self.reloadCurrent()
@@ -501,7 +535,13 @@ final class DMGSessionModel: ObservableObject {
                 try await DiskImageMounter.detach(mountedVolume)
             } catch {
                 guard token == sessionToken else { return }
-                banner = BannerMessage(text: "无法推出磁盘映像：\(describe(error))", isError: true)
+                banner = BannerMessage(
+                    text: String(
+                        format: NSLocalizedString("无法推出磁盘映像：%@", comment: ""),
+                        describe(error)
+                    ),
+                    isError: true
+                )
             }
         }
 
@@ -588,25 +628,43 @@ final class DMGSessionModel: ObservableObject {
     private func describe(_ error: Error) -> String {
         switch error {
         case MountError.toolFailed(_, let message):
-            return "无法打开该磁盘映像。\n\(message)"
+            return String(
+                format: NSLocalizedString("无法打开该磁盘映像。\n%@", comment: ""),
+                message
+            )
         case MountError.noMountPointFound:
-            return "无法打开该磁盘映像，文件可能已损坏。"
+            return NSLocalizedString("无法打开该磁盘映像，文件可能已损坏。", comment: "")
         case ProcessRunnerError.timedOut:
-            return "操作超时，请稍后重试。"
+            return NSLocalizedString("操作超时，请稍后重试。", comment: "")
         case ProcessRunnerError.launchFailed(let message):
-            return "无法启动系统工具。\n\(message)"
+            return String(
+                format: NSLocalizedString("无法启动系统工具。\n%@", comment: ""),
+                message
+            )
         case InstallError.invalidSource:
-            return "所选项目不是有效的应用程序。"
+            return NSLocalizedString("所选项目不是有效的应用程序。", comment: "")
         case InstallError.targetNotWritable:
-            return "没有权限写入应用程序文件夹，请在访达中手动拖拽安装。"
+            return NSLocalizedString("没有权限写入应用程序文件夹，请在访达中手动拖拽安装。", comment: "")
         case InstallError.conflict(let appURL):
-            return "目标位置已存在“\(appURL.lastPathComponent)”，请确认是否覆盖。"
+            return String(
+                format: NSLocalizedString("目标位置已存在“%@”，请确认是否覆盖。", comment: ""),
+                appURL.lastPathComponent
+            )
         case InstallError.copyFailed(let message):
-            return "安装失败：\(message)"
+            return String(
+                format: NSLocalizedString("安装失败：%@", comment: ""),
+                message
+            )
         case InstallError.moveFailed(let message):
-            return "安装失败：\(message)"
+            return String(
+                format: NSLocalizedString("安装失败：%@", comment: ""),
+                message
+            )
         default:
-            return "发生未知错误（\(type(of: error))）"
+            return String(
+                format: NSLocalizedString("发生未知错误（%@）", comment: ""),
+                "\(type(of: error))"
+            )
         }
     }
 }

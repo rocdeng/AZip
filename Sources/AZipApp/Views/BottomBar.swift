@@ -20,7 +20,7 @@ struct BottomBar: View {
             .buttonStyle(.plain)
             .disabled(isDisabled)
             .keyboardShortcut("i", modifiers: [.command, .shift])
-            .help("把应用安装到「应用程序」文件夹")
+            .help(NSLocalizedString("把应用安装到「应用程序」文件夹", comment: ""))
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 10)
@@ -31,7 +31,7 @@ struct BottomBar: View {
         HStack(spacing: 7) {
             Image(systemName: "bolt.fill")
                 .font(.system(size: 11, weight: .bold))
-            Text("安装应用")
+            Text(NSLocalizedString("安装应用", comment: ""))
                 .font(.system(size: 13, weight: .semibold))
         }
         .foregroundStyle(.primary)
@@ -84,9 +84,18 @@ struct BottomBar: View {
     private var statusText: String {
         let count = model.rootApplications.count
         switch count {
-        case 0: return "此磁盘映像没有可安装的应用程序"
-        case 1: return "可安装：\(model.rootApplications[0].name)"
-        default: return "\(count) 个应用程序可安装"
+        case 0:
+            return NSLocalizedString("此磁盘映像没有可安装的应用程序", comment: "")
+        case 1:
+            return String(
+                format: NSLocalizedString("可安装：%@", comment: ""),
+                model.rootApplications[0].name
+            )
+        default:
+            return String(
+                format: NSLocalizedString("%d 个应用程序可安装", comment: ""),
+                count
+            )
         }
     }
 }

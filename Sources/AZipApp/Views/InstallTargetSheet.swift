@@ -9,7 +9,7 @@ struct InstallTargetSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("选择要安装的应用程序")
+            Text(NSLocalizedString("选择要安装的应用程序", comment: ""))
                 .font(.headline)
 
             List(entries) { entry in
@@ -31,7 +31,7 @@ struct InstallTargetSheet: View {
 
             HStack {
                 Spacer()
-                Button("取消", action: onCancel)
+                Button(NSLocalizedString("取消", comment: ""), action: onCancel)
                     .keyboardShortcut(.cancelAction)
             }
         }

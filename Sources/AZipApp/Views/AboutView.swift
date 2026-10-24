@@ -20,12 +20,12 @@ struct AboutView: View {
                 .font(.system(size: 22, weight: .semibold))
                 .padding(.top, 10)
 
-            Text("版本 \(version)")
+            Text(String(format: NSLocalizedString("版本 %@", comment: ""), version))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.top, 2)
 
-            Text("双击磁盘映像一键安装应用，双击压缩包直接解压。")
+            Text(NSLocalizedString("双击磁盘映像一键安装应用，双击压缩包直接解压。", comment: ""))
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -34,20 +34,20 @@ struct AboutView: View {
                 .padding(.top, 14)
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("作者")
+                Text(NSLocalizedString("作者", comment: ""))
                     .font(.system(size: 11, weight: .semibold))
                 Text("dengpeng")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
 
-                Text("致谢")
+                Text(NSLocalizedString("致谢", comment: ""))
                     .font(.system(size: 11, weight: .semibold))
                     .padding(.top, 4)
-                Text("解压能力由 macOS 自带的 bsdtar / libarchive 提供（BSD 2-Clause 许可）。")
+                Text(NSLocalizedString("解压能力由 macOS 自带的 bsdtar / libarchive 提供（BSD 2-Clause 许可）。", comment: ""))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("磁盘映像挂载与安装使用系统组件 hdiutil、ditto。")
+                Text(NSLocalizedString("磁盘映像挂载与安装使用系统组件 hdiutil、ditto。", comment: ""))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -58,7 +58,7 @@ struct AboutView: View {
 
             Spacer(minLength: 16)
 
-            Button("好") { dismiss() }
+            Button(NSLocalizedString("好", comment: "")) { dismiss() }
                 .keyboardShortcut(.defaultAction)
                 .padding(.bottom, 20)
         }

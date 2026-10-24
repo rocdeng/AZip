@@ -110,6 +110,8 @@ struct RootWindow: View {
                 },
                 onCancel: { model.pendingApps = nil }
             )
+            .id(model.language)
+            .environment(\.locale, model.language.locale)
         }
         .sheet(item: $model.pendingConflict) { request in
             InstallConflictSheet(
@@ -119,9 +121,13 @@ struct RootWindow: View {
                 },
                 onCancel: { model.pendingConflict = nil }
             )
+            .id(model.language)
+            .environment(\.locale, model.language.locale)
         }
         .sheet(isPresented: $model.showAssociationSheet) {
             AssociationSheet()
+                .id(model.language)
+                .environment(\.locale, model.language.locale)
         }
     }
 
@@ -185,9 +191,9 @@ struct RootWindow: View {
     /// 导航栏已移除，只保留键盘快捷键（⌘[ / ⌘↑）。
     private var navigationShortcuts: some View {
         VStack(spacing: 0) {
-            Button("返回根目录") { model.goBackToRoot() }
+            Button(NSLocalizedString("返回根目录", comment: "")) { model.goBackToRoot() }
                 .keyboardShortcut("[", modifiers: .command)
-            Button("上一级") { model.goUp() }
+            Button(NSLocalizedString("上一级", comment: "")) { model.goUp() }
                 .keyboardShortcut(.upArrow, modifiers: .command)
         }
         .frame(width: 0, height: 0)
@@ -202,7 +208,7 @@ struct RootWindow: View {
             // 直接启动时主窗口就是设置界面，不显示空白的挂载占位。
             AssociationSettingsPane()
         case .mounting:
-            ProgressView("正在挂载…")
+            ProgressView(NSLocalizedString("正在挂载…", comment: ""))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case let .browsing(entries, layout):
             if let layout, model.navigationStack.isEmpty {
@@ -211,7 +217,7 @@ struct RootWindow: View {
                 GridContentView(entries: entries, onOpen: model.enter)
             }
         case .installing(_, let progress):
-            ProgressView("正在安装…", value: progress)
+            ProgressView(NSLocalizedString("正在安装…", comment: ""), value: progress)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let message):
             placeholder(message)

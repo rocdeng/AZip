@@ -7,7 +7,11 @@ public enum FileAssociationError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case let .setFailed(uti, status):
-            return "无法将 \(uti) 设为默认打开方式（错误码 \(status)）"
+            return String(
+                format: NSLocalizedString("无法将 %@ 设为默认打开方式（错误码 %d）", comment: ""),
+                uti,
+                status
+            )
         }
     }
 }
@@ -16,7 +20,10 @@ public enum FileAssociationError: LocalizedError, Sendable {
 public struct FileTypeAssociation: Sendable, Identifiable, Hashable {
     /// 主 UTI：决定双击行为，也是状态判定依据。
     public let id: String
-    public let label: String
+    private let labelKey: String
+    public var label: String {
+        NSLocalizedString(labelKey, comment: "")
+    }
     public let fileExtensions: [String]
     /// 恢复时使用的系统默认处理程序。
     public let systemHandler: String
@@ -28,7 +35,7 @@ public struct FileTypeAssociation: Sendable, Identifiable, Hashable {
         systemHandler: String
     ) {
         self.id = id
-        self.label = label
+        self.labelKey = label
         self.fileExtensions = fileExtensions
         self.systemHandler = systemHandler
     }

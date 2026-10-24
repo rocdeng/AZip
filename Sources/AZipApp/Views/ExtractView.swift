@@ -52,7 +52,10 @@ struct ExtractView: View {
                     .foregroundStyle(.secondary.opacity(0.85))
             }
             .buttonStyle(.plain)
-            .help(isRunning ? "取消解压" : "关闭")
+            .help(isRunning
+                ? NSLocalizedString("取消解压", comment: "")
+                : NSLocalizedString("关闭", comment: "")
+            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -67,13 +70,16 @@ struct ExtractView: View {
     private var title: String {
         switch job.phase {
         case .running:
-            return "AZip - 正在解压缩 \(job.sourceURL.lastPathComponent)"
+            return String(
+                format: NSLocalizedString("AZip - 正在解压缩 %@", comment: ""),
+                job.sourceURL.lastPathComponent
+            )
         case .finished:
-            return "解压完成"
+            return NSLocalizedString("解压完成", comment: "")
         case .cancelled:
-            return "已取消"
+            return NSLocalizedString("已取消", comment: "")
         case .failed:
-            return "解压失败"
+            return NSLocalizedString("解压失败", comment: "")
         }
     }
 
@@ -82,18 +88,33 @@ struct ExtractView: View {
         case .running:
             let percent = Int((job.progress * 100).rounded())
             guard job.progress > 0.02 else {
-                return "\(percent)%  正在估算剩余时间…"
+                return String(
+                    format: NSLocalizedString("%d%%  正在估算剩余时间…", comment: ""),
+                    percent
+                )
             }
             let elapsed = Date().timeIntervalSince(job.startedAt)
             let estimated = elapsed / job.progress * (1 - job.progress)
             let seconds = max(1, Int(estimated.rounded()))
             return seconds < 60
-                ? "\(percent)%  ·  约 \(seconds) 秒"
-                : "\(percent)%  ·  约 \(seconds / 60) 分 \(seconds % 60) 秒"
+                ? String(
+                    format: NSLocalizedString("%d%%  ·  约 %d 秒", comment: ""),
+                    percent,
+                    seconds
+                )
+                : String(
+                    format: NSLocalizedString("%d%%  ·  约 %d 分 %d 秒", comment: ""),
+                    percent,
+                    seconds / 60,
+                    seconds % 60
+                )
         case let .finished(url):
-            return "已解压到「\(url.lastPathComponent)」"
+            return String(
+                format: NSLocalizedString("已解压到「%@」", comment: ""),
+                url.lastPathComponent
+            )
         case .cancelled:
-            return "已停止"
+            return NSLocalizedString("已停止", comment: "")
         case let .failed(message):
             return message
         }
