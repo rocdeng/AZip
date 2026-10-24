@@ -40,19 +40,19 @@ pkill -f "/Applications/AZip.app/Contents/MacOS/AZip" 2>/dev/null || true
 
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
 
-# 覆盖安装：旧版本移入废纸篓（可恢复），不直接删除。
-# 移走前先注销，避免「打开方式」菜单里堆一串历史版本。
+# 覆盖安装：在旧版本上直接合并覆盖，不再往废纸篓堆积副本。
 if [ -d "$DEST" ]; then
     [ -x "$LSREGISTER" ] && "$LSREGISTER" -u "$DEST" >/dev/null 2>&1 || true
-    mkdir -p "$HOME/.Trash"
-    mv "$DEST" "$HOME/.Trash/AZip-$BUILD_NUMBER.app"
 fi
 
 ditto "$APP" "$DEST"
 
-# build 目录里的产物不参与「打开方式」，注销它、只保留 /Applications 里的正式版。
+# build 目录与 DerivedData 里的产物不参与「打开方式」，只保留 /Applications 的正式版。
 if [ -x "$LSREGISTER" ]; then
     "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
+    for derived in "$HOME"/Library/Developer/Xcode/DerivedData/AZip-*/Build/Products/*/AZip.app; do
+        [ -d "$derived" ] && "$LSREGISTER" -u "$derived" >/dev/null 2>&1 || true
+    done
     "$LSREGISTER" -f "$DEST" >/dev/null 2>&1 || true
 fi
 
