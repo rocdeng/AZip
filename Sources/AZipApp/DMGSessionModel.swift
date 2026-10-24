@@ -639,6 +639,9 @@ final class DMGSessionModel: ObservableObject {
                         TaskPanelModel.shared.update(nil)
                         ExtractionWindowController.shared.close()
                         NSApp.terminate(nil)
+                        // 兜底：若终止被某处拦下，3 秒后强制退出，避免残留空窗口。
+                        try? await Task.sleep(for: .seconds(3))
+                        exit(0)
                     }
                 }
             } catch InstallError.cancelled {
