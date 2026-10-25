@@ -50,19 +50,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 而不是回落到设置界面。
         DMGSessionModel.shared.launchedWithFile = true
         ArchiveBrowseSession.shared.open(url)
-        NSApp.activate(ignoringOtherApps: true)
+        bringMainWindowForward()
+    }
 
-        // 服务启动时窗口可能尚未创建完成，多尝试几次把主窗口带到前台。
-        for delay in [0.2, 0.6, 1.2] {
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                NSApp.activate(ignoringOtherApps: true)
-                for window in NSApp.windows
-                where window.styleMask.contains(.titled)
-                    && window.canBecomeMain
-                    && !window.isSheet {
-                    window.makeKeyAndOrderFront(nil)
-                }
-            }
+    /// 服务拉起时窗口可能还没创建：轮询到窗口出现为止，并强制置前。
+    private func bringMainWindowForward(attempts: Int = 20) {
+        guard attempts > 0 else { return }
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        NSRunningApplication.current.activate(options: [.activateAllWindows])
+
+        if let window = NSApp.windows.first(where: {
+            $0.styleMask.contains(.titled) && $0.canBecomeMain && !$0.isSheet
+        }) {
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            self.bringMainWindowForward(attempts: attempts - 1)
         }
     }
 
