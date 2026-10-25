@@ -123,6 +123,12 @@ struct BrowseView: View {
         .onTapGesture(count: 2) {
             session.enter(entry)
         }
+        .onDrag {
+            if let url = session.dragURL(for: entry) {
+                return NSItemProvider(contentsOf: url) ?? NSItemProvider()
+            }
+            return NSItemProvider()
+        }
         .contextMenu {
             if !entry.isDirectory {
                 Button(NSLocalizedString("打开", comment: "")) {

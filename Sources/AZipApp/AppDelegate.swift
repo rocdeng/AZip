@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 调试入口：AZIP_BROWSE=<path> 启动时直接进入浏览模式。
         if let path = ProcessInfo.processInfo.environment["AZIP_BROWSE"] {
+            DMGSessionModel.shared.launchedWithFile = true
             ArchiveBrowseSession.shared.open(URL(fileURLWithPath: path))
         }
     }
@@ -45,6 +46,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             error.pointee = NSLocalizedString("没有可浏览的压缩包", comment: "") as NSString
             return
         }
+        // 服务调用与双击打开同属「由文件启动」：关闭浏览后应退出，
+        // 而不是回落到设置界面。
+        DMGSessionModel.shared.launchedWithFile = true
         ArchiveBrowseSession.shared.open(url)
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

@@ -49,6 +49,7 @@ final class ArchiveBrowseSession: ObservableObject {
                 guard self.archiveURL == url else { return }
                 self.entries = list
                 self.isLoading = false
+                self.prefetchCurrentDirectory()
             } catch {
                 guard self.archiveURL == url else { return }
                 self.isLoading = false
@@ -65,12 +66,14 @@ final class ArchiveBrowseSession: ObservableObject {
         currentPath = entry.path.hasSuffix("/")
             ? String(entry.path.dropLast())
             : entry.path
+        prefetchCurrentDirectory()
     }
 
     func goUp() {
         guard canGoUp else { return }
         currentPath = (currentPath as NSString).deletingLastPathComponent
         if currentPath == "." { currentPath = "" }
+        prefetchCurrentDirectory()
     }
 
     func close() {
@@ -114,6 +117,32 @@ final class ArchiveBrowseSession: ObservableObject {
             errorText = error.localizedDescription
             return nil
         }
+    }
+
+    /// 进入目录后后台预提取该层文件，供拖拽导出使用。
+    func prefetchCurrentDirectory() {
+        guard let archiveURL else { return }
+        let files = visibleEntries.filter { !$0.isDirectory }
+        guard !files.isEmpty else { return }
+        let directory: URL
+        do { directory = try workingDirectory() } catch { return }
+        let paths = files.map(\.path)
+
+        Task.detached(priority: .utility) {
+            _ = try? await ProcessRunner.run(
+                "/usr/bin/bsdtar",
+                ["-xf", archiveURL.path, "-C", directory.path] + paths,
+                environment: ["LC_ALL": "C"],
+                timeoutSeconds: 300
+            )
+        }
+    }
+
+    /// 拖拽用：返回已提取到临时目录的文件 URL；尚未提取完成时返回 nil。
+    func dragURL(for entry: ArchiveEntry) -> URL? {
+        guard let tempDirectory else { return nil }
+        let url = tempDirectory.appendingPathComponent(entry.path)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     private func workingDirectory() throws -> URL {
