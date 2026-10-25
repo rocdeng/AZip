@@ -119,14 +119,27 @@ final class ArchiveBrowseSession: ObservableObject {
         }
     }
 
-    /// 进入目录后后台预提取该层文件，供拖拽导出使用。
+    /// 进入目录后后台预提取该层内容，供拖拽导出使用。
+    /// 目录会连同其全部子项一起提取，保证拖出去的是完整文件夹（空目录也会被创建）。
     func prefetchCurrentDirectory() {
         guard let archiveURL else { return }
-        let files = visibleEntries.filter { !$0.isDirectory }
-        guard !files.isEmpty else { return }
+        let visible = visibleEntries
+        guard !visible.isEmpty else { return }
         let directory: URL
         do { directory = try workingDirectory() } catch { return }
-        let paths = files.map(\.path)
+
+        var paths: [String] = []
+        for entry in visible {
+            if entry.isDirectory {
+                let prefix = entry.path.hasSuffix("/") ? entry.path : entry.path + "/"
+                paths.append(entry.path)
+                paths.append(contentsOf: entries
+                    .filter { $0.path.hasPrefix(prefix) }
+                    .map(\.path))
+            } else {
+                paths.append(entry.path)
+            }
+        }
 
         Task.detached(priority: .utility) {
             _ = try? await ProcessRunner.run(
