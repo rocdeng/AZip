@@ -43,11 +43,9 @@ struct RootWindow: View {
                         // 解压由独立浮窗承载，主窗口不露面。
                         window.orderOut(nil)
                     } else if browse.isActive {
-                        window.setContentSize(NSSize(width: 680, height: 520))
-                        window.center()
+                        Self.resize(window, to: NSSize(width: 680, height: 520))
                     } else if isIdle {
-                        window.setContentSize(NSSize(width: 520, height: 600))
-                        window.center()
+                        Self.resize(window, to: NSSize(width: 520, height: 600))
                     } else {
                         model.applyPendingWindowSize(to: window)
                     }
@@ -156,6 +154,19 @@ struct RootWindow: View {
     }
 
     private static let bottomBarHeight: CGFloat = 70
+
+    /// 只改尺寸、保留用户拖动后的位置；窗口首次出现时才居中。
+    private static func resize(_ window: NSWindow, to size: NSSize) {
+        if !window.isVisible {
+            window.setContentSize(size)
+            window.center()
+            return
+        }
+        // setContentSize 会把窗口顶部固定、向下方扩展；保持左下角不动更符合直觉。
+        var frame = window.frame
+        frame.size = size
+        window.setFrame(frame, display: true)
+    }
 
     private var isIdle: Bool {
         if case .idle = model.state { return true }

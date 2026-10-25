@@ -27,9 +27,11 @@ struct BrowseView: View {
                 Image(systemName: "chevron.up")
                     .font(.system(size: 11, weight: .semibold))
                     .frame(width: 26, height: 22)
+                    .glassCapsule()
             }
             .buttonStyle(.plain)
             .disabled(!session.canGoUp)
+            .opacity(session.canGoUp ? 1 : 0.45)
             .help(NSLocalizedString("上一级", comment: ""))
 
             Text(pathText)
@@ -156,16 +158,21 @@ struct BrowseView: View {
                     .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                    .glassCapsule()
             }
             .buttonStyle(.plain)
             .disabled(session.isExtractingAll)
 
             Spacer()
 
-            Button(NSLocalizedString("关闭", comment: ""), action: onClose)
-                .controlSize(.small)
+            Button(action: onClose) {
+                Text(NSLocalizedString("关闭", comment: ""))
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .glassCapsule()
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -222,5 +229,43 @@ struct BrowseView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.string(from: date)
+    }
+}
+
+
+/// 统一的毛玻璃胶囊按钮外观。
+private struct GlassCapsuleStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Capsule().fill(
+                            LinearGradient(
+                                colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                    )
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.85), .white.opacity(0.16)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+            )
+            .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
+    }
+}
+
+extension View {
+    func glassCapsule() -> some View {
+        modifier(GlassCapsuleStyle())
     }
 }
