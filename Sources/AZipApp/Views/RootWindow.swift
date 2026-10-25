@@ -15,7 +15,11 @@ struct RootWindow: View {
         Group {
             // 解压进度只由独立浮窗展示，主窗口内不再挂第二份。
             if browse.isActive {
-                BrowseView(session: browse, onClose: { browse.close() })
+                BrowseView(session: browse, onClose: {
+                    // 直接退出：先关浏览会经过 idle 分支，窗口会闪一下设置界面。
+                    browse.close()
+                    if model.launchedWithFile { exit(0) }
+                })
             } else if isIdle {
                 content
             } else {
