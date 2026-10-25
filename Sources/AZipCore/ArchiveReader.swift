@@ -43,7 +43,7 @@ public enum ArchiveReader {
         guard result.status == 0 else {
             throw ArchiveError.toolFailed(result.stderr)
         }
-        return parseListing(result.stdout)
+        return synthesizeMissingDirectories(parseListing(result.stdout))
     }
 
     /// 把单个条目解压到指定目录，返回解压后的 URL。
@@ -62,6 +62,29 @@ public enum ArchiveReader {
             throw ArchiveError.toolFailed(result.stderr)
         }
         return directory.appendingPathComponent(entry.path)
+    }
+
+    /// 部分工具打包时不会写入目录条目（例如 `zip -X` 或某些构建产物），
+    /// 这里根据文件路径反推并补全缺失的目录，否则根目录会显示为空。
+    static func synthesizeMissingDirectories(_ entries: [ArchiveEntry]) -> [ArchiveEntry] {
+        var result = entries
+        var known = Set(entries.map { $0.path.hasSuffix("/") ? String($0.path.dropLast()) : $0.path })
+
+        for entry in entries {
+            var parent = entry.parentPath
+            while !parent.isEmpty {
+                if !known.contains(parent) {
+                    let path = parent + "/"
+                    result.append(
+                        ArchiveEntry(path: path, isDirectory: true, size: 0, modified: nil)
+                    )
+                    known.insert(parent)
+                }
+                let next = (parent as NSString).deletingLastPathComponent
+                parent = (next == "." || next == parent) ? "" : next
+            }
+        }
+        return result
     }
 
     /// 解析 `bsdtar -tvf` 的输出。

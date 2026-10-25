@@ -51,9 +51,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DMGSessionModel.shared.launchedWithFile = true
         ArchiveBrowseSession.shared.open(url)
         NSApp.activate(ignoringOtherApps: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            NSApp.windows.first { $0.identifier?.rawValue == "AZipMainWindow" }?
-                .makeKeyAndOrderFront(nil)
+
+        // 服务启动时窗口可能尚未创建完成，多尝试几次把主窗口带到前台。
+        for delay in [0.2, 0.6, 1.2] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                NSApp.activate(ignoringOtherApps: true)
+                for window in NSApp.windows
+                where window.styleMask.contains(.titled)
+                    && window.canBecomeMain
+                    && !window.isSheet {
+                    window.makeKeyAndOrderFront(nil)
+                }
+            }
         }
     }
 
