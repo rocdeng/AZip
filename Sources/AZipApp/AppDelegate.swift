@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let path = ProcessInfo.processInfo.environment["AZIP_BROWSE"] {
             DMGSessionModel.shared.launchedWithFile = true
             ArchiveBrowseSession.shared.open(URL(fileURLWithPath: path))
+            BrowseWindowController.shared.show()
         }
     }
 
@@ -50,26 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 而不是回落到设置界面。
         DMGSessionModel.shared.launchedWithFile = true
         ArchiveBrowseSession.shared.open(url)
-        bringMainWindowForward()
-    }
-
-    /// 服务拉起时窗口可能还没创建：轮询到窗口出现为止，并强制置前。
-    private func bringMainWindowForward(attempts: Int = 20) {
-        guard attempts > 0 else { return }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
-        NSRunningApplication.current.activate(options: [.activateAllWindows])
-
-        if let window = NSApp.windows.first(where: {
-            $0.styleMask.contains(.titled) && $0.canBecomeMain && !$0.isSheet
-        }) {
-            window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            self.bringMainWindowForward(attempts: attempts - 1)
-        }
+        BrowseWindowController.shared.show()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
