@@ -21,6 +21,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
 
         DMGSessionModel.shared.reportPendingBackups()
+
+        // 注册 Finder「服务」菜单入口。
+        NSApp.servicesProvider = self
+        NSUpdateDynamicServices()
+
+        // 调试入口：AZIP_BROWSE=<path> 启动时直接进入浏览模式。
+        if let path = ProcessInfo.processInfo.environment["AZIP_BROWSE"] {
+            ArchiveBrowseSession.shared.open(URL(fileURLWithPath: path))
+        }
+    }
+
+    /// Finder 右键 → 服务 → 「用 AZip 浏览压缩包」
+    @objc func browseArchive(
+        _ pboard: NSPasteboard,
+        userData: String,
+        error: AutoreleasingUnsafeMutablePointer<NSString>
+    ) {
+        guard
+            let items = pboard.readObjects(forClasses: [NSURL.self], options: nil),
+            let url = items.first as? URL
+        else {
+            error.pointee = NSLocalizedString("没有可浏览的压缩包", comment: "") as NSString
+            return
+        }
+        ArchiveBrowseSession.shared.open(url)
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            NSApp.windows.first { $0.identifier?.rawValue == "AZipMainWindow" }?
+                .makeKeyAndOrderFront(nil)
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {

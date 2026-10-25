@@ -56,6 +56,15 @@ targets:
         CFBundleDisplayName: AZip
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSServices:
+          - NSMessage: browseArchive
+            NSPortName: AZip
+            NSMenuItem:
+              default: 用 AZip 浏览压缩包
+            NSSendFileTypes:
+              - public.item
+            NSRequiredContext:
+              NSApplicationIdentifier: com.apple.finder
         CFBundleLocalizations:
           - zh-Hans
           - en

@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct RootWindow: View {
     @ObservedObject var model: DMGSessionModel
     @StateObject private var archive = ArchiveSession.shared
+    @StateObject private var browse = ArchiveBrowseSession.shared
     @State private var isDropTargeted = false
     @Environment(\.openSettings) private var openSettings
 
@@ -13,7 +14,9 @@ struct RootWindow: View {
         // 这里不再放任何不透明或材质背景，否则会盖住底层的 behindWindow 模糊。
         Group {
             // 解压进度只由独立浮窗展示，主窗口内不再挂第二份。
-            if isIdle {
+            if browse.isActive {
+                BrowseView(session: browse, onClose: { browse.close() })
+            } else if isIdle {
                 content
             } else {
                 // DMG 背景图有固定内在尺寸，会把 VStack 撑高、把安装栏顶出窗口；
@@ -39,6 +42,9 @@ struct RootWindow: View {
                     if archive.job != nil {
                         // 解压由独立浮窗承载，主窗口不露面。
                         window.orderOut(nil)
+                    } else if browse.isActive {
+                        window.setContentSize(NSSize(width: 680, height: 520))
+                        window.center()
                     } else if isIdle {
                         window.setContentSize(NSSize(width: 520, height: 600))
                         window.center()
@@ -186,6 +192,12 @@ struct RootWindow: View {
 
     /// 未打开文件时只显示 "AZip"，打开后显示 "AZip - 文件名"。
     private var windowTitle: String {
+        if browse.isActive {
+            return String(
+                format: NSLocalizedString("AZip - 浏览 %@", comment: ""),
+                browse.archiveName
+            )
+        }
         if let job = archive.job {
             return "AZip - \(job.sourceURL.lastPathComponent)"
         }

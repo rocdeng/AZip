@@ -133,3 +133,14 @@
 "准备中…" = "Preparing…";
 
 "已取消安装" = "Installation cancelled";
+
+"这个文件夹是空的" = "This folder is empty";
+"打开" = "Open";
+"导出到…" = "Export to…";
+"双击进入文件夹" = "Double-click to open folder";
+"双击打开" = "Double-click to open";
+"解压缩到…" = "Extract to…";
+"解压到此处" = "Extract Here";
+"选择目标文件夹，压缩包内容会解压到以压缩包命名的子文件夹里。" = "Choose a destination; contents go into a subfolder named after the archive.";
+"没有可浏览的压缩包" = "No archive to browse";
+"AZip - 浏览 %@" = "AZip - Browsing %@";
