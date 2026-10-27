@@ -166,9 +166,14 @@ final class FilePreviewer: ObservableObject {
 
         let zeroRatio = Double(data.reduce(0) { $0 + ($1 == 0 ? 1 : 0) }) / Double(data.count)
 
-        // 零字节很少才按 UTF-8 尝试。
-        if zeroRatio < 0.1, let text = String(data: data, encoding: .utf8) {
-            return text
+        // 零字节很少时按 UTF-8 解码。
+        // 注意：前 8KB 可能正好切断一个多字节字符，严格解码会整体返回 nil，
+        // 因此这里用 lossy 解码，只在替换字符比例过高时才判定为非文本。
+        if zeroRatio < 0.1 {
+            let text = String(decoding: data, as: UTF8.self)
+            let replaced = text.unicodeScalars.reduce(0) { $0 + ($1 == "\u{FFFD}" ? 1 : 0) }
+            let ratio = Double(replaced) / Double(max(text.count, 1))
+            if ratio < 0.02 { return text }
         }
 
         let gbEncoding = String.Encoding(
