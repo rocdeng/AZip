@@ -8,6 +8,8 @@ struct BrowseView: View {
     @ObservedObject var session: ArchiveBrowseSession
     var onClose: () -> Void
 
+    @State private var selectedPath: String?
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -121,7 +123,15 @@ struct BrowseView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color.accentColor.opacity(selectedPath == entry.path ? 0.20 : 0))
+                .padding(.horizontal, 8)
+        )
         .contentShape(Rectangle())
+        .onTapGesture {
+            selectedPath = entry.path
+        }
         .onTapGesture(count: 2) {
             session.enter(entry)
         }

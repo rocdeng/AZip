@@ -9,6 +9,17 @@ struct FileTile: View {
 
     @State private var isHovering = false
 
+    /// MacOS Alias 文件（DMG 里常见的 Applications 别名）需要解析到目标，
+    /// 否则系统会给出普通文档图标，而不是文件夹图标。
+    private var iconSourceURL: URL {
+        if let values = try? entry.url.resourceValues(forKeys: [.isAliasFileKey]),
+           values.isAliasFile == true,
+           let resolved = try? URL(resolvingAliasFileAt: entry.url) {
+            return resolved
+        }
+        return entry.url
+    }
+
     /// 归档类文件用自绘图标，其余交给系统。
     @ViewBuilder
     private var iconView: some View {
@@ -25,7 +36,7 @@ struct FileTile: View {
                 FileTypeIcon(style: style)
             }
         } else {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: entry.url.path))
+            Image(nsImage: NSWorkspace.shared.icon(forFile: iconSourceURL.path))
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)

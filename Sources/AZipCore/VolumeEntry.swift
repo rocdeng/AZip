@@ -47,6 +47,7 @@ public enum VolumeScanner {
             .isDirectoryKey,
             .isPackageKey,
             .isSymbolicLinkKey,
+            .isAliasFileKey,
             .isHiddenKey,
             .fileAllocatedSizeKey,
             .fileSizeKey,
@@ -67,8 +68,9 @@ public enum VolumeScanner {
 
             let values = try? url.resourceValues(forKeys: Set(keys))
             let isSymbolicLink = values?.isSymbolicLink ?? false
+            let isAlias = values?.isAliasFile ?? false
 
-            if isSymbolicLink {
+            if isSymbolicLink || isAlias {
                 // 保留符号链接（典型是 DMG 里的 Applications 快捷方式）：
                 // 原生窗口里它是有图标的投放目标，过滤掉会留下一个空白方块。
                 // 它永远不是 `.application`，所以不会出现在可安装列表里。
