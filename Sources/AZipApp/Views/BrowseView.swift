@@ -94,6 +94,7 @@ struct BrowseView: View {
     private func row(for entry: ArchiveEntry) -> some View {
         BrowseRow(
             entry: entry,
+            session: session,
             isSelected: selectedPath == entry.path,
             onTap: { selectedPath = entry.path },
             onDoubleTap: { session.enter(entry) },
@@ -251,6 +252,7 @@ enum BrowseIconCache {
 /// 单行条目。独立成 View 并实现 Equatable，点击选中时只重绘这一行。
 private struct BrowseRow: View, Equatable {
     let entry: ArchiveEntry
+    let session: ArchiveBrowseSession
     let isSelected: Bool
     let onTap: () -> Void
     let onDoubleTap: () -> Void
@@ -261,6 +263,8 @@ private struct BrowseRow: View, Equatable {
         lhs.entry == rhs.entry && lhs.isSelected == rhs.isSelected
     }
 
+    // session 是单例引用，不参与相等性比较。
+
     var body: some View {
         HStack(spacing: 10) {
             Image(nsImage: BrowseIconCache.icon(for: entry))
@@ -268,6 +272,13 @@ private struct BrowseRow: View, Equatable {
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 24, height: 24)
+                .onHover { hovering in
+                    if hovering {
+                        FilePreviewer.shared.beginHover(entry: entry, session: session)
+                    } else {
+                        FilePreviewer.shared.endHover()
+                    }
+                }
 
             Text(entry.name)
                 .font(.system(size: 13))

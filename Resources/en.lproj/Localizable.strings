@@ -146,3 +146,6 @@
 "AZip - 浏览 %@" = "AZip - Browsing %@";
 
 "快速安装" = "Quick Install";
+
+"无法预览此文件" = "Cannot preview this file";
+"%@ · 无法预览此类型" = "%@ · Preview not available";
