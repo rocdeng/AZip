@@ -161,7 +161,8 @@ final class FilePreviewer: ObservableObject {
             return String(data: data, encoding: .utf16BigEndian)
         }
         if data.starts(with: [0xEF, 0xBB, 0xBF]) {
-            return String(data: data.dropFirst(3), encoding: .utf8)
+            // 同样用 lossy：截断可能切断尾部多字节字符。
+            return String(decoding: data.dropFirst(3), as: UTF8.self)
         }
 
         let zeroRatio = Double(data.reduce(0) { $0 + ($1 == 0 ? 1 : 0) }) / Double(data.count)
