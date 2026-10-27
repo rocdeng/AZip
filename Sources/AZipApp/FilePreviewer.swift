@@ -151,21 +151,49 @@ final class FilePreviewer: ObservableObject {
     }
 
     private static func decodeText(_ data: Data) -> String? {
-        guard !data.isEmpty, !data.contains(0) else { return nil }
-        if let text = String(data: data, encoding: .utf8) { return text }
+        guard !data.isEmpty else { return nil }
+
+        // BOM 优先：UTF-16 文件里大量 0 字节不应该被当成二进制。
+        if data.starts(with: [0xFF, 0xFE]) {
+            return String(data: data, encoding: .utf16LittleEndian)
+        }
+        if data.starts(with: [0xFE, 0xFF]) {
+            return String(data: data, encoding: .utf16BigEndian)
+        }
+        if data.starts(with: [0xEF, 0xBB, 0xBF]) {
+            return String(data: data.dropFirst(3), encoding: .utf8)
+        }
+
+        let zeroRatio = Double(data.reduce(0) { $0 + ($1 == 0 ? 1 : 0) }) / Double(data.count)
+
+        // 零字节很少才按 UTF-8 尝试。
+        if zeroRatio < 0.1, let text = String(data: data, encoding: .utf8) {
+            return text
+        }
 
         let gbEncoding = String.Encoding(
             rawValue: CFStringConvertEncodingToNSStringEncoding(
                 CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)
             )
         )
-        return String(data: data, encoding: gbEncoding)
+        if zeroRatio < 0.1, let text = String(data: data, encoding: gbEncoding) {
+            return text
+        }
+
+        // 无 BOM 的 UTF-16 文本：零字节占比高但仍能整体解码。
+        if zeroRatio > 0.2 {
+            let even = data.count - (data.count % 2)
+            if let text = String(data: data.prefix(even), encoding: .utf16LittleEndian) {
+                return text
+            }
+        }
+        return nil
     }
 
     private static func preferredSize(for content: PreviewContent) -> NSSize {
         switch content {
         case let .image(image):
-            let maxSize = NSSize(width: 360, height: 260)
+            let maxSize = NSSize(width: 560, height: 440)
             let width = max(image.size.width, 1)
             let height = max(image.size.height, 1)
             let scale = min(1, min(maxSize.width / width, maxSize.height / height))
@@ -174,7 +202,7 @@ final class FilePreviewer: ObservableObject {
                 height: max(80, height * scale)
             )
         case .text:
-            return NSSize(width: 360, height: 200)
+            return NSSize(width: 460, height: 280)
         case .unavailable:
             return NSSize(width: 220, height: 60)
         }
