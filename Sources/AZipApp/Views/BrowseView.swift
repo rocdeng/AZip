@@ -288,7 +288,9 @@ private struct BrowseRow: View, Equatable {
                 Text(formatted(date))
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
-                    .frame(width: 96, alignment: .trailing)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 112, alignment: .trailing)
             }
         }
         .padding(.horizontal, 16)
