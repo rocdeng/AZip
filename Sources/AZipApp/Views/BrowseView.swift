@@ -221,14 +221,7 @@ struct BrowseView: View {
     // MARK: - Formatting
 
     private func icon(for entry: ArchiveEntry) -> NSImage {
-        if entry.isDirectory {
-            return NSWorkspace.shared.icon(for: .folder)
-        }
-        let ext = (entry.name as NSString).pathExtension
-        if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
-            return NSWorkspace.shared.icon(for: type)
-        }
-        return NSWorkspace.shared.icon(for: .data)
+        BrowseIconCache.icon(for: entry)
     }
 
     private func sizeText(_ size: Int64) -> String {
@@ -277,5 +270,33 @@ private struct GlassCapsuleStyle: ViewModifier {
 extension View {
     func glassCapsule() -> some View {
         modifier(GlassCapsuleStyle())
+    }
+}
+
+
+/// 图标按「目录 / 扩展名」缓存：NSWorkspace 取图标开销不小，
+/// 列表滚动和选中重绘时会被反复调用。
+@MainActor
+enum BrowseIconCache {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for entry: ArchiveEntry) -> NSImage {
+        if entry.isDirectory {
+            return cached("__folder__") { NSWorkspace.shared.icon(for: .folder) }
+        }
+        let ext = (entry.name as NSString).pathExtension.lowercased()
+        return cached(ext) {
+            if !ext.isEmpty, let type = UTType(filenameExtension: ext) {
+                return NSWorkspace.shared.icon(for: type)
+            }
+            return NSWorkspace.shared.icon(for: .data)
+        }
+    }
+
+    private static func cached(_ key: String, make: () -> NSImage) -> NSImage {
+        if let image = cache[key] { return image }
+        let image = make()
+        cache[key] = image
+        return image
     }
 }

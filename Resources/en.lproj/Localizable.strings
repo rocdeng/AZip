@@ -144,3 +144,5 @@
 "选择目标文件夹，压缩包内容会解压到以压缩包命名的子文件夹里。" = "Choose a destination; contents go into a subfolder named after the archive.";
 "没有可浏览的压缩包" = "No archive to browse";
 "AZip - 浏览 %@" = "AZip - Browsing %@";
+
+"快速安装" = "Quick Install";

@@ -39,7 +39,8 @@ struct BottomBar: View {
         HStack(spacing: 7) {
             Image(systemName: "bolt.fill")
                 .font(.system(size: 11, weight: .bold))
-            Text(NSLocalizedString("安装应用", comment: ""))
+                .foregroundStyle(Color.yellow)
+            Text(NSLocalizedString("快速安装", comment: ""))
                 .font(.system(size: 13, weight: .semibold))
         }
         .foregroundStyle(.primary)

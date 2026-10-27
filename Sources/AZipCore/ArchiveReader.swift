@@ -109,6 +109,8 @@ public enum ArchiveReader {
             if path.hasPrefix("./") { path.removeFirst(2) }
             if path.isEmpty || path == "." { continue }
 
+            path = unescapePath(path)
+
             entries.append(
                 ArchiveEntry(
                     path: path,
@@ -119,6 +121,41 @@ public enum ArchiveReader {
             )
         }
         return entries
+    }
+
+    /// `bsdtar` 在 `LC_ALL=C` 下会把非 ASCII 字节输出成 `\\NNN` 八进制转义，
+    /// 这里还原成 UTF-8，中文文件名才能正常显示。
+    static func unescapePath(_ text: String) -> String {
+        guard text.contains("\\") else { return text }
+        var bytes: [UInt8] = []
+        let source = Array(text.utf8)
+        var index = 0
+        while index < source.count {
+            let byte = source[index]
+            if byte == 0x5C, index + 1 < source.count {
+                if source[index + 1] == 0x5C {
+                    bytes.append(0x5C)
+                    index += 2
+                    continue
+                }
+                if index + 3 < source.count,
+                   let d1 = octalDigit(source[index + 1]),
+                   let d2 = octalDigit(source[index + 2]),
+                   let d3 = octalDigit(source[index + 3]) {
+                    bytes.append(d1 << 6 | d2 << 3 | d3)
+                    index += 4
+                    continue
+                }
+            }
+            bytes.append(byte)
+            index += 1
+        }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
+    private static func octalDigit(_ byte: UInt8) -> UInt8? {
+        guard byte >= 0x30, byte <= 0x37 else { return nil }
+        return byte - 0x30
     }
 
     private static func parseDate(_ text: String) -> Date? {

@@ -1,0 +1,9 @@
+/*
+  Title of the Finder "Services" menu item (English).
+
+  The key must match NSServices -> NSMenuItem in Info.plist exactly.
+  pbs reads this table when it registers the service and stores every
+  language's title; Finder picks one when it draws the menu.
+*/
+
+"用 AZip 浏览压缩包" = "View with AZip";

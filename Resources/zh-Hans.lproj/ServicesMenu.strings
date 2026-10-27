@@ -1,0 +1,9 @@
+/*
+  Finder「服务」菜单里的入口名称（简体中文）。
+
+  键必须与 Info.plist 里 NSServices → NSMenuItem 的值逐字一致。
+  系统注册服务时（pbs）读取本表，把各语言的标题一起写进
+  服务数据库，Finder 画菜单时按当前语言取。
+*/
+
+"用 AZip 浏览压缩包" = "用 AZip 浏览压缩包";
