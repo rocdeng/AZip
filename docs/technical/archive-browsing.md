@@ -117,3 +117,27 @@ destination = <选中的父目录>/<压缩包文件名去掉扩展名>
 | Finder 双击压缩包 | 独立解压浮窗，完成后退出（`ArchiveSession`） |
 | Finder 右键 → 服务 | 浏览窗口（`ArchiveBrowseSession` + `BrowseWindowController`） |
 | 直接运行 AZip | 设置窗口 |
+
+## 八、服务菜单标题的语言
+
+服务菜单的标题不是从 `Localizable.strings` 取的。系统在注册服务时读一张单独的
+`ServicesMenu.strings`，键就是 `Info.plist` 里 `NSMenuItem` 的值（这里是
+`用 AZip 浏览压缩包`），值是给该语言用的标题。Apple 自己的 Preview、Terminal
+用的是同一套表。
+
+| 文件 | 内容 |
+|---|---|
+| `Resources/zh-Hans.lproj/ServicesMenu.strings` | `"用 AZip 浏览压缩包" = "用 AZip 浏览压缩包";` |
+| `Resources/en.lproj/ServicesMenu.strings` | `"用 AZip 浏览压缩包" = "View with AZip";` |
+
+注册时 pbs 会把各语言的标题一起写进
+`~/Library/Preferences/com.apple.ServicesMenu.Services.plist`，Finder 画菜单时
+按当前语言取一条。可以这样核对存进去的是几条：
+
+```bash
+plutil -p ~/Library/Preferences/com.apple.ServicesMenu.Services.plist \
+  | grep -A6 com.dengpeng.AZip
+```
+
+改完标题要重新注册（`Scripts/build.sh` 末尾的 `lsregister -f` 已经做了）。
+如果菜单还显示旧标题，是 pbs 的服务数据库没重建，注销再登录一次即可。
