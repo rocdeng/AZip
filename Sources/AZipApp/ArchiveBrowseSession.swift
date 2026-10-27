@@ -10,6 +10,8 @@ final class ArchiveBrowseSession: ObservableObject {
 
     @Published private(set) var archiveURL: URL?
     @Published private(set) var entries: [ArchiveEntry] = []
+    /// 当前目录的直接子项。提前算好并缓存：大包里每次重绘都过滤排序会明显卡顿。
+    @Published private(set) var visibleEntries: [ArchiveEntry] = []
     @Published private(set) var currentPath: String = ""
     @Published private(set) var isLoading = false
     @Published var errorText: String?
@@ -22,17 +24,16 @@ final class ArchiveBrowseSession: ObservableObject {
 
     var archiveName: String { archiveURL?.lastPathComponent ?? "" }
 
-    /// 当前目录下的直接子项，目录在前、其余按名称排序。
-    var visibleEntries: [ArchiveEntry] {
-        entries
+    var canGoUp: Bool { !currentPath.isEmpty }
+
+    private func recomputeVisibleEntries() {
+        visibleEntries = entries
             .filter { $0.parentPath == currentPath }
             .sorted { lhs, rhs in
                 if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
                 return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
             }
     }
-
-    var canGoUp: Bool { !currentPath.isEmpty }
 
     // MARK: - 打开与导航
 
@@ -49,6 +50,7 @@ final class ArchiveBrowseSession: ObservableObject {
                 guard self.archiveURL == url else { return }
                 self.entries = list
                 self.isLoading = false
+                self.recomputeVisibleEntries()
                 self.prefetchCurrentDirectory()
             } catch {
                 guard self.archiveURL == url else { return }
@@ -66,6 +68,7 @@ final class ArchiveBrowseSession: ObservableObject {
         currentPath = entry.path.hasSuffix("/")
             ? String(entry.path.dropLast())
             : entry.path
+        recomputeVisibleEntries()
         prefetchCurrentDirectory()
     }
 
@@ -73,12 +76,14 @@ final class ArchiveBrowseSession: ObservableObject {
         guard canGoUp else { return }
         currentPath = (currentPath as NSString).deletingLastPathComponent
         if currentPath == "." { currentPath = "" }
+        recomputeVisibleEntries()
         prefetchCurrentDirectory()
     }
 
     func close() {
         archiveURL = nil
         entries = []
+        visibleEntries = []
         currentPath = ""
         errorText = nil
         if let tempDirectory {
