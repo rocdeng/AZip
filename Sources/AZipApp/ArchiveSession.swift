@@ -140,11 +140,20 @@ final class ArchiveSession: ObservableObject {
             } catch {
                 await MainActor.run {
                     guard let self, var current = self.job else { return }
+                    // 计时器会每秒覆盖浮窗文案，失败/取消后必须停掉，
+                    // 否则界面看起来像「一直在解压」。
+                    self.elapsedTask?.cancel()
                     if case ArchiveError.cancelled = error {
                         current.phase = .cancelled
                         self.advanceOrTerminate(after: 0.6)
                     } else {
                         current.phase = .failed(error.localizedDescription)
+                        self.updatePanel(
+                            url: url,
+                            progress: current.progress,
+                            detail: error.localizedDescription,
+                            finished: false
+                        )
                     }
                     self.job = current
                 }

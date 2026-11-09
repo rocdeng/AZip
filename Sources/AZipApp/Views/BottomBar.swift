@@ -48,7 +48,6 @@ struct BottomBar: View {
         .padding(.vertical, 11)
         .background(glassFill)
         .overlay(glassStroke)
-        .overlay(alignment: .top) { topHighlight }
         .shadow(color: .black.opacity(0.10), radius: 8, y: 2)
         .opacity(isDisabled ? 0.45 : 1)
         .contentShape(Capsule())
@@ -81,14 +80,6 @@ struct BottomBar: View {
         )
     }
 
-    /// 顶部高光线。
-    private var topHighlight: some View {
-        Capsule()
-            .fill(.white.opacity(0.55))
-            .frame(height: 1)
-            .padding(.horizontal, 20)
-            .padding(.top, 1)
-    }
 }
 
 /// 前进/后退玻璃胶囊：左半后退、右半前进，中间细分隔线。

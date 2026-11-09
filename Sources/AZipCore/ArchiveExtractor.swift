@@ -43,6 +43,44 @@ public enum ArchiveExtractor {
         supportedExtensions.contains(url.pathExtension.lowercased())
     }
 
+    /// 单文件压缩（`.img.gz`、`data.bz2` 这类）：解压出来是一个文件，不是目录。
+    ///
+    /// `.tar.gz` / `.tgz` 等仍然是归档包，走 `bsdtar`。
+    /// macOS 自带的 `bsdtar` 3.5 不识别裸 gzip（实测报 `Unrecognized archive format`），
+    /// 所以这类格式必须交给系统 `gzip` / `bzip2` 处理。
+    public static func isSingleFileCompression(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        let archiveSuffixes = [
+            ".tar.gz", ".tgz", ".tar.bz2", ".tbz2", ".tbz",
+            ".tar.xz", ".txz", ".tar.zst", ".tar.lz4", ".tar"
+        ]
+        if archiveSuffixes.contains(where: { name.hasSuffix($0) }) { return false }
+        return ["gz", "bz2", "xz", "zst", "lz4"].contains(url.pathExtension.lowercased())
+    }
+
+    /// 单文件压缩对应的解压命令（输出到 stdout）。
+    private static func decompressor(for ext: String) -> (String, [String])? {
+        switch ext {
+        case "gz":
+            return ("/usr/bin/gzip", ["-dc"])
+        case "bz2":
+            return ("/usr/bin/bzip2", ["-dc"])
+        case "xz", "zst", "lz4":
+            guard let tool = locateTool(ext) else { return nil }
+            return (tool, ["-dc"])
+        default:
+            return nil
+        }
+    }
+
+    private static func locateTool(_ name: String) -> String? {
+        for path in ["/usr/bin/\(name)", "/opt/homebrew/bin/\(name)", "/usr/local/bin/\(name)"]
+        where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+        return nil
+    }
+
     /// 解压到 `destination`（必须是尚不存在的目录）。
     ///
     /// 进度按「目标目录已生成条目数 / 归档内条目总数」估算，每 180 ms 采样一次。
@@ -60,6 +98,17 @@ public enum ArchiveExtractor {
         let parent = destination.deletingLastPathComponent()
         guard FileManager.default.isWritableFile(atPath: parent.path) else {
             throw ArchiveError.destinationNotWritable(parent)
+        }
+
+        // 单文件压缩：目标本身就是文件（`foo.img.gz` → 同目录 `foo.img`）。
+        if isSingleFileCompression(archiveURL) {
+            try await decompressSingleFile(
+                archiveURL,
+                to: destination,
+                isCancelled: isCancelled
+            )
+            progress(1.0)
+            return
         }
 
         do {
@@ -115,9 +164,28 @@ public enum ArchiveExtractor {
     }
 
     /// 默认解压位置：与归档同目录、同名文件夹；重名时追加序号。
+    /// 单文件压缩则返回同目录下的文件路径（`foo.img.gz` → `foo.img`）。
     public static func defaultDestination(for archiveURL: URL) -> URL {
         let parent = archiveURL.deletingLastPathComponent()
         let base = baseName(for: archiveURL)
+
+        if isSingleFileCompression(archiveURL) {
+            let candidate = parent.appendingPathComponent(base)
+            guard FileManager.default.fileExists(atPath: candidate.path) else {
+                return candidate
+            }
+            let stem = (base as NSString).deletingPathExtension
+            let ext = (base as NSString).pathExtension
+            for index in 2...999 {
+                let name = ext.isEmpty ? "\(stem) \(index)" : "\(stem) \(index).\(ext)"
+                let numbered = parent.appendingPathComponent(name)
+                if !FileManager.default.fileExists(atPath: numbered.path) {
+                    return numbered
+                }
+            }
+            return parent.appendingPathComponent("\(stem) \(UUID().uuidString.prefix(6)).\(ext)")
+        }
+
         let candidate = parent.appendingPathComponent(base)
         guard FileManager.default.fileExists(atPath: candidate.path) else {
             return candidate
@@ -142,6 +210,62 @@ public enum ArchiveExtractor {
     }
 
     // MARK: - Helpers
+
+    /// 单文件压缩：把解压结果直接写到 `outputURL`（不是目录）。
+    private static func decompressSingleFile(
+        _ archiveURL: URL,
+        to outputURL: URL,
+        isCancelled: @escaping @Sendable () -> Bool
+    ) async throws {
+        let ext = archiveURL.pathExtension.lowercased()
+        guard let (tool, baseArguments) = decompressor(for: ext) else {
+            throw ArchiveError.unsupportedFormat(ext)
+        }
+
+        FileManager.default.createFile(atPath: outputURL.path, contents: nil)
+        guard let handle = FileHandle(forWritingAtPath: outputURL.path) else {
+            throw ArchiveError.destinationNotWritable(outputURL.deletingLastPathComponent())
+        }
+        defer { try? handle.close() }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = baseArguments + [archiveURL.path]
+        let errorPipe = Pipe()
+        process.standardOutput = handle
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+        } catch {
+            try? FileManager.default.removeItem(at: outputURL)
+            throw ArchiveError.toolFailed(error.localizedDescription)
+        }
+
+        while process.isRunning {
+            if isCancelled() {
+                process.terminate()
+                process.waitUntilExit()
+                try? FileManager.default.removeItem(at: outputURL)
+                throw ArchiveError.cancelled
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+
+        let errorText = String(
+            decoding: (try? errorPipe.fileHandleForReading.readToEnd()) ?? Data(),
+            as: UTF8.self
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard process.terminationStatus == 0 else {
+            try? FileManager.default.removeItem(at: outputURL)
+            throw ArchiveError.toolFailed(
+                errorText.isEmpty
+                    ? "\(tool) 退出码 \(process.terminationStatus)"
+                    : errorText
+            )
+        }
+    }
 
     private static let logger = Logger(subsystem: "com.dengpeng.AZip", category: "extract")
 

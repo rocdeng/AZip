@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import QuickLookThumbnailing
 import SwiftUI
 import AZipCore
 
@@ -66,7 +67,7 @@ final class FilePreviewer: ObservableObject {
         }
         guard !Task.isCancelled else { return }
 
-        let content = Self.loadContent(for: fileURL, name: entry.name)
+        let content = await Self.loadContent(for: fileURL, name: entry.name)
         show(content: content, for: entry)
     }
 
@@ -122,8 +123,13 @@ final class FilePreviewer: ObservableObject {
         "png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif", "heic", "webp", "icns"
     ]
 
-    static func loadContent(for url: URL, name: String) -> PreviewContent {
+    static func loadContent(for url: URL, name: String) async -> PreviewContent {
         let ext = (name as NSString).pathExtension.lowercased()
+
+        // PDF 用 AppKit 自带的 PDF 表示渲染第一页。
+        if ext == "pdf", let image = NSImage(contentsOf: url) {
+            return .image(image)
+        }
 
         if imageExtensions.contains(ext), let image = NSImage(contentsOf: url) {
             return .image(image)
@@ -138,6 +144,12 @@ final class FilePreviewer: ObservableObject {
         if let text = decodeText(sample) {
             return .text(text)
         }
+
+        // 其他类型（Office、OFD 等）交给系统 QuickLook：装了对应预览插件就能出图。
+        if let thumbnail = await quickLookThumbnail(for: url) {
+            return .image(thumbnail)
+        }
+
         let size = ByteCountFormatter.string(
             fromByteCount: Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0),
             countStyle: .file
@@ -148,6 +160,20 @@ final class FilePreviewer: ObservableObject {
                 size
             )
         )
+    }
+
+    private static func quickLookThumbnail(for url: URL, maxSize: CGFloat = 560) async -> NSImage? {
+        let request = QLThumbnailGenerator.Request(
+            fileAt: url,
+            size: CGSize(width: maxSize, height: maxSize),
+            scale: NSScreen.main?.backingScaleFactor ?? 2,
+            representationTypes: .thumbnail
+        )
+        return await withCheckedContinuation { continuation in
+            QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { representation, _ in
+                continuation.resume(returning: representation?.nsImage)
+            }
+        }
     }
 
     private static func decodeText(_ data: Data) -> String? {
