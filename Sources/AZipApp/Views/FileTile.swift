@@ -90,7 +90,9 @@ struct FileTile: View {
             .onHover { isHovering = $0 }
             .onTapGesture(count: 2, perform: onOpen)
             .onDrag {
-                NSItemProvider(contentsOf: entry.url) ?? NSItemProvider()
+                // 拖放安装不走「快速安装」，这里登记一次，用于装完后按开关清理 dmg。
+                DMGSessionModel.shared.noteDragInstall(of: entry)
+                return NSItemProvider(contentsOf: entry.url) ?? NSItemProvider()
             }
             .help(entry.name)
     }

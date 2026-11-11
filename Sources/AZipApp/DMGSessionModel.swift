@@ -94,6 +94,9 @@ final class DMGSessionModel: ObservableObject {
     private var rootEntries: [VolumeEntry] = []
     /// 窗口尚未出现时暂存的尺寸，由 `applyPendingWindowSize(to:)` 应用。
     private var pendingWindowSize: CGSize?
+    /// 本次会话的源 dmg（嵌套映像时是复制到临时目录的副本）。
+    /// 勾选「安装/解压后把 DMG/压缩包移到废纸篓」时，卸载完成后把它移走。
+    private var sourceDMGURL: URL?
 
     var currentDirectory: URL? {
         navigationStack.last ?? mount?.mountPoint
@@ -184,6 +187,7 @@ final class DMGSessionModel: ObservableObject {
         let token = sessionToken
 
         dmgName = dmgURL.lastPathComponent
+        sourceDMGURL = dmgURL
         navigationStack = []
         rootEntries = []
         layout = nil
@@ -231,6 +235,8 @@ final class DMGSessionModel: ObservableObject {
             if (try? FileManager.default.copyItem(at: initialURL, to: temp)) != nil {
                 dmgURL = temp
                 nestedTemporaryDMG = temp
+                // 原 dmg 在即将卸载的源卷里，清理目标换成这份临时副本。
+                sourceDMGURL = temp
             }
         }
 
@@ -520,6 +526,49 @@ final class DMGSessionModel: ObservableObject {
         startInstall(request.appURL, overwrite: true)
     }
 
+    /// 勾选「安装/解压后把 DMG/压缩包移到废纸篓」时，把本次打开的 dmg 移走。
+    /// 只在挂载卷卸载完成后调用：卷仍挂载时移动会失败或留下脏状态。
+    private func trashSourceDMGIfEnabled() {
+        guard UserDefaults.standard.bool(forKey: "deleteArchiveAfterExtraction"),
+              let url = sourceDMGURL,
+              FileManager.default.fileExists(atPath: url.path) else { return }
+        var trashed: NSURL?
+        // 移到废纸篓（可恢复），不做不可逆删除。
+        try? FileManager.default.trashItem(at: url, resultingItemURL: &trashed)
+        if trashed != nil { sourceDMGURL = nil }
+    }
+
+    /// 拖放安装（把 App 拖到 Applications 别名）拿不到 Finder 的复制结果，
+    /// 这里以 `/Applications` 里同名 App 的修改时间为准：一旦发生变化就认为复制落盘，
+    /// 随后按开关把源 dmg 移入废纸篓。拖到别处则不会有变化，60 秒后自动放弃。
+    func noteDragInstall(of entry: VolumeEntry) {
+        guard entry.kind == .application,
+              UserDefaults.standard.bool(forKey: "deleteArchiveAfterExtraction"),
+              let sourceDMG = sourceDMGURL else { return }
+
+        let target = URL(fileURLWithPath: "/Applications")
+            .appendingPathComponent(entry.url.lastPathComponent)
+        let before = (try? target.resourceValues(
+            forKeys: [.contentModificationDateKey]
+        ))?.contentModificationDate
+
+        Task { @MainActor [weak self] in
+            for _ in 0..<120 {
+                try? await Task.sleep(for: .milliseconds(500))
+                guard let self, self.sourceDMGURL == sourceDMG else { return }
+                let current = (try? target.resourceValues(
+                    forKeys: [.contentModificationDateKey]
+                ))?.contentModificationDate
+                if current != before {
+                    // 复制刚结束，给系统写入留一点时间再动源文件。
+                    try? await Task.sleep(for: .seconds(1.5))
+                    self.trashSourceDMGIfEnabled()
+                    return
+                }
+            }
+        }
+    }
+
     private func startInstall(_ appURL: URL, overwrite: Bool) {
         // 同一时刻只允许一个安装流程，包括安装成功后的卸载阶段。
         // `isInstallInFlight` 是单一事实来源，`.installing` 检查仅作防御。
@@ -632,6 +681,8 @@ final class DMGSessionModel: ObservableObject {
                     self.rootEntries = []
                     self.navigationStack = []
                     self.layout = nil
+                    // 卷已卸载，源 dmg 不再被占用，可以安全移入废纸篓。
+                    self.trashSourceDMGIfEnabled()
                     // 先复位安装标志，否则 applicationShouldTerminate 会拦下退出。
                     self.isInstallInFlight = false
                     Task { @MainActor in

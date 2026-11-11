@@ -109,7 +109,7 @@ struct AssociationSettingsPane: View {
     private var optionRow: some View {
         HStack(spacing: 12) {
             Toggle(
-                NSLocalizedString("解压后删除压缩包", comment: ""),
+                NSLocalizedString("安装/解压后把 DMG/压缩包移动到废纸篓", comment: ""),
                 isOn: $deleteArchiveAfterExtraction
             )
             .toggleStyle(.checkbox)
