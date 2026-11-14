@@ -46,7 +46,7 @@ enum WindowFrameMemory {
         window.setFrameOrigin(target)
     }
 
-    private static func isOnVisibleScreen(origin: NSPoint, size: NSSize) -> Bool {
+    static func isOnVisibleScreen(origin: NSPoint, size: NSSize) -> Bool {
         let rect = NSRect(origin: origin, size: size)
         return NSScreen.screens.contains { $0.visibleFrame.intersects(rect) }
     }

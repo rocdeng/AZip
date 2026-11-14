@@ -12,12 +12,15 @@ struct WindowConfigurator: NSViewRepresentable {
     var onWindowClose: (@MainActor () -> Void)?
     /// 返回 false 可阻止窗口关闭（例如安装进行中）。
     var shouldClose: (@MainActor () -> Bool)?
+    /// 窗口位置变化后的回调，用于记忆设置页位置。
+    var onWindowMove: (@MainActor (NSWindow) -> Void)?
 
     @MainActor
     final class Coordinator: NSObject, NSWindowDelegate {
         weak var window: NSWindow?
         var onClose: (@MainActor () -> Void)?
         var shouldClose: (@MainActor () -> Bool)?
+        var onMove: (@MainActor (NSWindow) -> Void)?
         /// 被替换掉的原窗口 delegate；我们未实现的回调仍转交给它。
         /// AppKit 只会在主线程访问它，但 `responds(to:)` / `forwardingTarget(for:)`
         /// 是 nonisolated 重写，Swift 6 无法自动证明隔离，故显式标注。
@@ -35,9 +38,23 @@ struct WindowConfigurator: NSViewRepresentable {
             onClose?()
         }
 
+        @objc func handleWindowMoved(_ notification: Notification) {
+            guard let window = notification.object as? NSWindow else { return }
+            onMove?(window)
+        }
+
         func windowShouldClose(_ sender: NSWindow) -> Bool {
             if let shouldClose, !shouldClose() { return false }
             return previousDelegate?.windowShouldClose?(sender) ?? true
+        }
+
+        func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+            // 刚按设计尺寸摆好窗口的短时间内，拒绝非用户拖拽的外部改尺寸
+            // （窗口布局恢复工具通过辅助功能接口改尺寸也会走到这里）。
+            if !sender.inLiveResize, ExternalResizeGuard.isProtected(sender) {
+                return sender.frame.size
+            }
+            return previousDelegate?.windowWillResize?(sender, to: frameSize) ?? frameSize
         }
 
         override func responds(to aSelector: Selector!) -> Bool {
@@ -100,15 +117,14 @@ struct WindowConfigurator: NSViewRepresentable {
 
         // 每次更新都同步最新的判断闭包。
         coordinator.shouldClose = shouldClose
+        coordinator.onMove = onWindowMove
 
         // 只在首次看到该窗口时注册一次关闭监听。
         guard coordinator.window !== window else { return }
         if let previous = coordinator.window {
-            NotificationCenter.default.removeObserver(
-                coordinator,
-                name: NSWindow.willCloseNotification,
-                object: previous
-            )
+            for name in [NSWindow.willCloseNotification, NSWindow.didMoveNotification] {
+                NotificationCenter.default.removeObserver(coordinator, name: name, object: previous)
+            }
         }
         coordinator.window = window
         coordinator.onClose = onWindowClose
@@ -122,6 +138,13 @@ struct WindowConfigurator: NSViewRepresentable {
             coordinator,
             selector: #selector(Coordinator.windowWillClose(_:)),
             name: NSWindow.willCloseNotification,
+            object: window
+        )
+        // 位置变化走通知：方法名刻意避开 delegate 的 windowDidMove，原 delegate 照常收到该回调。
+        NotificationCenter.default.addObserver(
+            coordinator,
+            selector: #selector(Coordinator.handleWindowMoved(_:)),
+            name: NSWindow.didMoveNotification,
             object: window
         )
     }
@@ -166,5 +189,28 @@ struct WindowConfigurator: NSViewRepresentable {
         effectView.layer?.cornerRadius = 14
         effectView.layer?.cornerCurve = .continuous
         effectView.layer?.masksToBounds = true
+    }
+}
+
+/// 应用刚按目标尺寸摆好窗口后的短暂保护期。
+///
+/// 有些窗口布局恢复工具会在应用启动时，通过辅助功能接口把窗口改回它记录的旧尺寸，
+/// 发现应用“改回去”还会再试几次，两边来回改就是窗口闪烁。保护期内这类非拖拽的改尺寸
+/// 直接被 `windowWillResize` 拒绝，窗口尺寸保持不动；保护期过后不再干预。
+@MainActor
+enum ExternalResizeGuard {
+    private static var deadlines: [ObjectIdentifier: Date] = [:]
+    private static let duration: TimeInterval = 3
+
+    static func protect(_ window: NSWindow) {
+        deadlines[ObjectIdentifier(window)] = Date().addingTimeInterval(duration)
+    }
+
+    static func isProtected(_ window: NSWindow) -> Bool {
+        let key = ObjectIdentifier(window)
+        guard let deadline = deadlines[key] else { return false }
+        if Date() < deadline { return true }
+        deadlines[key] = nil
+        return false
     }
 }

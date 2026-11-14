@@ -903,7 +903,8 @@ final class DMGSessionModel: ObservableObject {
 
     /// DMG 声明的窗口尺寸只覆盖内容区；窗口还要容纳标题栏与底部安装栏。
     static let titleBarInset: CGFloat = 12
-    static let bottomBarInset: CGFloat = 78
+    /// 与 `RootWindow` 给安装栏分配的高度一致，否则多出来的高度会在背景图下方露出一条底色。
+    static let bottomBarInset: CGFloat = 70
 
     private func windowContentSize(for size: CGSize) -> NSSize {
         let insets = Self.titleBarInset + Self.bottomBarInset
@@ -931,8 +932,7 @@ final class DMGSessionModel: ObservableObject {
         }
         pendingWindowSize = nil
         for window in windows {
-            window.setContentSize(windowContentSize(for: size))
-            window.center()
+            applyDesignSize(size, to: window)
         }
     }
 
@@ -940,8 +940,14 @@ final class DMGSessionModel: ObservableObject {
     func applyPendingWindowSize(to window: NSWindow) {
         guard let size = pendingWindowSize else { return }
         pendingWindowSize = nil
+        applyDesignSize(size, to: window)
+    }
+
+    /// 按 DMG 设计尺寸摆放窗口，并在短时间内挡住外部工具把尺寸改回旧值。
+    private func applyDesignSize(_ size: CGSize, to window: NSWindow) {
         window.setContentSize(windowContentSize(for: size))
         window.center()
+        ExternalResizeGuard.protect(window)
     }
 
     /// 清掉为打开嵌套 dmg 而生成的临时副本。

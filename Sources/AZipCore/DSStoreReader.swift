@@ -9,8 +9,31 @@ public struct DSStoreDocument: Sendable {
     public var backgroundColor: [CGFloat]?
     public var backgroundAlias: Data?
     public var iconPositions: [String: CGPoint] = [:]
+    /// Finder 窗口自带的界面元素。`windowFrame` 是整个 Finder 窗口的外框，
+    /// 打开了侧边栏、工具栏等时，这些区域也算在外框里。
+    public var finderChrome = FinderChrome()
 
     public init() {}
+}
+
+/// `bwsp` 里记录的 Finder 窗口界面元素开关；缺省都视为隐藏。
+public struct FinderChrome: Sendable, Equatable {
+    public var showsSidebar = false
+    public var showsToolbar = false
+    public var showsStatusBar = false
+    public var showsPathBar = false
+
+    public init(
+        showsSidebar: Bool = false,
+        showsToolbar: Bool = false,
+        showsStatusBar: Bool = false,
+        showsPathBar: Bool = false
+    ) {
+        self.showsSidebar = showsSidebar
+        self.showsToolbar = showsToolbar
+        self.showsStatusBar = showsStatusBar
+        self.showsPathBar = showsPathBar
+    }
 }
 
 public enum DSStoreReader {
@@ -283,6 +306,12 @@ public enum DSStoreReader {
                   let bounds = properties["WindowBounds"] as? String,
                   let frame = parseBoundsString(bounds) else { return }
             document.windowFrame = frame
+            document.finderChrome = FinderChrome(
+                showsSidebar: properties["ShowSidebar"] as? Bool ?? false,
+                showsToolbar: properties["ShowToolbar"] as? Bool ?? false,
+                showsStatusBar: properties["ShowStatusBar"] as? Bool ?? false,
+                showsPathBar: properties["ShowPathbar"] as? Bool ?? false
+            )
 
         default:
             break

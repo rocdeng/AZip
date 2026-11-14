@@ -13,6 +13,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "ApplePersistenceIgnoreState": true,
             "NSQuitAlwaysKeepsWindows": false
         ])
+
+        // SwiftUI 会把主窗口最后的 frame 存进 UserDefaults 并在建窗后恢复。
+        // 设置页与 DMG 浏览共用这一扇窗口，恢复回来的往往是上一次 DMG 窗口的尺寸和位置，
+        // 会和 DMG 设计尺寸打架；这里清掉，设置页位置改由 `WindowFrameMemory` 单独记忆。
+        let defaults = UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys
+        where key.hasPrefix("NSWindow Frame") {
+            defaults.removeObject(forKey: key)
+        }
+        defaults.synchronize()
     }
 
     private var keyObserver: NSObjectProtocol?

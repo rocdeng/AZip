@@ -20,8 +20,15 @@ public struct DMGWindowLayout: Sendable {
         let background = resolveBackgroundImage(mountPoint: mountPoint, document: document)
         guard background != nil || !document.iconPositions.isEmpty else { return nil }
 
-        let rawSize = document.windowFrame?.size
-            ?? backgroundImagePointSize(background)
+        let imageSize = backgroundImagePointSize(background)
+        let rawSize = document.windowFrame.map {
+            designContentSize(
+                windowBounds: $0.size,
+                backgroundImage: imageSize,
+                chrome: document.finderChrome
+            )
+        }
+            ?? imageSize
             ?? defaultSize
         let baseSize = rawSize.width.isFinite && rawSize.height.isFinite ? rawSize : defaultSize
         let contentSize = CGSize(
@@ -41,6 +48,39 @@ public struct DMGWindowLayout: Sendable {
             iconPositions: document.iconPositions,
             iconSize: iconSize
         )
+    }
+
+    /// `.DS_Store` 记录的是 Finder 整个窗口的外框：总是包含标题栏，
+    /// 打开侧边栏、工具栏、状态栏、路径栏时也包含这些区域。背景图才是内容区的设计尺寸。
+    /// 外框比背景图多出的部分能用这些 Finder 界面元素解释时，按背景图尺寸显示，
+    /// 否则多出的宽高会在背景图右侧或下方露出一条底色。
+    static func designContentSize(
+        windowBounds: CGSize,
+        backgroundImage: CGSize?,
+        chrome: FinderChrome = FinderChrome()
+    ) -> CGSize {
+        guard let image = backgroundImage else { return windowBounds }
+        let extraWidth = windowBounds.width - image.width
+        let extraHeight = windowBounds.height - image.height
+        guard extraWidth >= -1, extraWidth <= chromeWidthAllowance(chrome),
+              extraHeight > 0, extraHeight <= chromeHeightAllowance(chrome) else {
+            return windowBounds
+        }
+        return image
+    }
+
+    /// 侧边栏可被用户拖宽，这里留足余量；没有侧边栏时宽度必须与背景图一致。
+    static func chromeWidthAllowance(_ chrome: FinderChrome) -> CGFloat {
+        chrome.showsSidebar ? 320 : 1
+    }
+
+    /// 标题栏约 28–32pt；工具栏与标题栏合并后整体约 52–64pt；状态栏、路径栏各约 22–28pt。
+    static func chromeHeightAllowance(_ chrome: FinderChrome) -> CGFloat {
+        var allowance: CGFloat = 40
+        if chrome.showsToolbar { allowance += 40 }
+        if chrome.showsStatusBar { allowance += 30 }
+        if chrome.showsPathBar { allowance += 30 }
+        return allowance
     }
 
     /// 有些 DMG（dmgcanvas 生成）不写窗口尺寸，但背景图就是设计尺寸。

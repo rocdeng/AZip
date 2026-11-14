@@ -43,13 +43,17 @@ struct RootWindow: View {
                 title: windowTitle,
                 hidesWindowChrome: archive.job != nil,
                 onWindowReady: { window in
+                    let showsSettings = isSettingsPage
+                    if !showsSettings { Self.settingsPlacedWindow = nil }
                     if archive.job != nil {
                         // 解压由独立浮窗承载，主窗口不露面。
                         window.orderOut(nil)
                     } else if browse.isActive {
                         Self.resize(window, to: NSSize(width: 680, height: 520))
+                    } else if showsSettings {
+                        Self.placeSettings(window)
                     } else if isIdle {
-                        Self.resize(window, to: NSSize(width: 520, height: 600))
+                        Self.resize(window, to: Self.settingsSize)
                     } else {
                         model.applyPendingWindowSize(to: window)
                     }
@@ -73,6 +77,12 @@ struct RootWindow: View {
                         return false
                     }
                     return true
+                },
+                onWindowMove: { window in
+                    // 只记忆设置页自己的位置；DMG/浏览窗口的位置不影响下次设置页出现的地方。
+                    guard isSettingsPage,
+                          Self.settingsPlacedWindow == ObjectIdentifier(window) else { return }
+                    WindowFrameMemory.save(window, key: Self.settingsFrameKey)
                 }
             )
         )
@@ -96,7 +106,7 @@ struct RootWindow: View {
         .onChange(of: archive.job?.id) { _, _ in
             // 解压浮窗用小尺寸，结束后回到设置页尺寸。
             let size = archive.job == nil
-                ? NSSize(width: 520, height: 600)
+                ? Self.settingsSize
                 : NSSize(width: 420, height: 240)
             resizeMainWindow(size)
         }
@@ -157,7 +167,30 @@ struct RootWindow: View {
         window.center()
     }
 
-    private static let bottomBarHeight: CGFloat = 70
+    private static let bottomBarHeight = DMGSessionModel.bottomBarInset
+    private static let settingsSize = NSSize(width: 520, height: 600)
+    private static let settingsFrameKey = "settingsWindow"
+    /// 已按设置页摆放过的窗口；离开设置页时清空，下次回到设置页重新摆放。
+    private static var settingsPlacedWindow: ObjectIdentifier?
+
+    /// 进入设置页时只摆放一次：有记忆且仍在屏幕上就回到上次位置，否则沿用原来的居中/保留位置逻辑。
+    /// 之后的 `updateNSView` 不再动窗口，避免把用户刚拖到的位置拉回去。
+    private static func placeSettings(_ window: NSWindow) {
+        let id = ObjectIdentifier(window)
+        guard settingsPlacedWindow != id else { return }
+        settingsPlacedWindow = id
+
+        let frameSize = window.frameRect(
+            forContentRect: NSRect(origin: .zero, size: settingsSize)
+        ).size
+        if let origin = WindowFrameMemory.savedOrigin(for: settingsFrameKey),
+           WindowFrameMemory.isOnVisibleScreen(origin: origin, size: frameSize) {
+            window.setFrame(NSRect(origin: origin, size: frameSize), display: true)
+        } else {
+            resize(window, to: settingsSize)
+        }
+        ExternalResizeGuard.protect(window)
+    }
 
     /// 只改尺寸、保留用户拖动后的位置；窗口首次出现时才居中。
     private static func resize(_ window: NSWindow, to size: NSSize) {
@@ -175,6 +208,11 @@ struct RootWindow: View {
     private var isIdle: Bool {
         if case .idle = model.state { return true }
         return false
+    }
+
+    /// 无参数启动时显示的设置页（由文件启动的会话结束后会直接退出，不算设置页）。
+    private var isSettingsPage: Bool {
+        isIdle && !model.launchedWithFile && archive.job == nil && !browse.isActive
     }
 
     /// 接收拖入的 `.dmg`：只处理第一个合法磁盘映像。
