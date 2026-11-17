@@ -6,6 +6,8 @@ public enum ArchiveError: LocalizedError, Sendable {
     case destinationNotWritable(URL)
     case toolFailed(String)
     case cancelled
+    /// 压缩包已加密，需要用户提供密码。
+    case passwordRequired
 
     public var errorDescription: String? {
         switch self {
@@ -17,6 +19,8 @@ public enum ArchiveError: LocalizedError, Sendable {
             return String(format: NSLocalizedString("解压失败：%@", comment: ""), message)
         case .cancelled:
             return NSLocalizedString("已取消解压", comment: "")
+        case .passwordRequired:
+            return NSLocalizedString("该压缩包已加密，需要密码", comment: "")
         }
     }
 }
@@ -41,6 +45,22 @@ public enum ArchiveExtractor {
 
     public static func isSupported(_ url: URL) -> Bool {
         supportedExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    /// 压缩包是否加密（目前只对 zip 可靠）。
+    ///
+    /// 必须在启动解压前判断：`bsdtar` 遇到加密包会去读 stdin 要密码，
+    /// 在 App 里没有终端，表现为进程永久卡住。
+    public static func isEncrypted(_ url: URL) -> Bool {
+        guard url.pathExtension.lowercased() == "zip" else { return false }
+        guard let output = try? runAndCapture(
+            "/usr/bin/unzip", ["-Z", "-v", url.path]
+        ) else { return false }
+        // 逐条目判断：目录条目总是 "not encrypted"，只要有一个条目是 "encrypted" 就算加密。
+        return output.split(separator: "\n").contains { line in
+            guard let range = line.range(of: "file security status:") else { return false }
+            return line[range.upperBound...].trimmingCharacters(in: .whitespaces) == "encrypted"
+        }
     }
 
     /// 单文件压缩（`.img.gz`、`data.bz2` 这类）：解压出来是一个文件，不是目录。
@@ -87,6 +107,7 @@ public enum ArchiveExtractor {
     public static func extract(
         archiveURL: URL,
         to destination: URL,
+        password: String? = nil,
         progress: @escaping @Sendable (Double) -> Void,
         isCancelled: @escaping @Sendable () -> Bool = { false }
     ) async throws {
@@ -122,14 +143,19 @@ public enum ArchiveExtractor {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: bsdtar)
-        process.arguments = [
+        var arguments = [
             "-xf", archiveURL.path,
             "-C", destination.path,
             "--no-same-owner"
         ]
+        // 加密包必须显式给密码：不给的话 bsdtar 会去读 stdin，在 App 里表现为永久卡住。
+        if let password { arguments += ["--passphrase", password] }
+        process.arguments = arguments
         let errorPipe = Pipe()
         process.standardOutput = FileHandle.nullDevice
         process.standardError = errorPipe
+        // 兜底：即使 bsdtar 仍想交互式地要密码，也只会读到 EOF 并报错退出，不会卡住。
+        process.standardInput = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -156,6 +182,13 @@ public enum ArchiveExtractor {
 
         log("bsdtar exit=\(process.terminationStatus) stderr=\(errorText.prefix(300))")
         guard process.terminationStatus == 0 else {
+            // 密码不对时 bsdtar 仍会写出损坏的文件，必须先清掉，
+            // 否则用户会以为「已经解压出来了」。
+            try? FileManager.default.removeItem(at: destination)
+            // 密码错误或未提供密码：交给上层弹输入框，而不是当成普通失败。
+            if errorText.lowercased().contains("passphrase") {
+                throw ArchiveError.passwordRequired
+            }
             throw ArchiveError.toolFailed(
                 errorText.isEmpty ? "bsdtar 退出码 \(process.terminationStatus)" : errorText
             )

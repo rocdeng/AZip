@@ -13,6 +13,8 @@ struct AZipApp: App {
                 .id(model.language)
                 .environment(\.locale, model.language.locale)
         }
+        // 不指定时 SwiftUI 按 900×450 建窗；与设置页尺寸一致，首帧前的摆放失效时也不会闪出宽窗口。
+        .defaultSize(width: 520, height: 600)
         .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .newItem) {

@@ -45,11 +45,23 @@ final class CancelFlag: @unchecked Sendable {
     }
 }
 
+/// 加密压缩包的密码请求。
+struct ArchivePasswordRequest: Identifiable {
+    let id = UUID()
+    let url: URL
+    let message: String?
+}
+
 @MainActor
 final class ArchiveSession: ObservableObject {
     static let shared = ArchiveSession()
 
     @Published private(set) var job: ExtractionJob?
+    /// 需要密码时挂在这里，由密码窗口展示。
+    @Published var passwordRequest: ArchivePasswordRequest?
+    /// 从拿到文件到真正开始解压之间（含加密检测、等密码）为 true。
+    /// 主窗口的「空闲退出」逻辑靠它避免在检测期间把 App 关掉。
+    @Published private(set) var isPending = false
 
     private let cancelFlag = CancelFlag()
 
@@ -57,6 +69,57 @@ final class ArchiveSession: ObservableObject {
     static var supportedExtensions: Set<String> { ArchiveExtractor.supportedExtensions }
 
     func extract(url: URL) {
+        isPending = true
+        // 由文件启动时先把主窗口收起来：检测加密、等密码的这段时间里
+        // 主窗口还是个空白页，留在屏幕上会闪一下。
+        if DMGSessionModel.shared.launchedWithFile {
+            for window in NSApp.windows
+            where window.identifier?.rawValue == "AZipMainWindow" {
+                window.orderOut(nil)
+            }
+        }
+        // 加密 zip：先要密码。直接解压的话 bsdtar 会去读 stdin，
+        // 在 App 里没有终端，进程会永久卡在「准备中」。
+        if ArchiveExtractor.isEncrypted(url) {
+            passwordRequest = ArchivePasswordRequest(url: url, message: nil)
+            // 等 App 完成启动再弹窗：启动事件阶段窗口系统还没准备好，
+            // 直接 orderFront 偶尔会被吞掉（表现为没有任何窗口）。
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(180))
+                ArchivePasswordWindowController.shared.show()
+            }
+            return
+        }
+        startExtraction(url: url, password: nil)
+    }
+
+    /// 密码窗口提交后重试解压。
+    func submitPassword(_ password: String) {
+        guard let request = passwordRequest else { return }
+        // 空密码一定解不开（bsdtar 也会直接拒绝），不必启动解压：原地提示错误。
+        guard !password.isEmpty else {
+            passwordRequest = ArchivePasswordRequest(
+                url: request.url,
+                message: NSLocalizedString("密码不正确，请重试", comment: "")
+            )
+            ArchivePasswordWindowController.shared.show()
+            return
+        }
+        isPending = true
+        passwordRequest = nil
+        ArchivePasswordWindowController.shared.close()
+        startExtraction(url: request.url, password: password)
+    }
+
+    /// 用户取消输入密码。
+    func cancelPasswordPrompt() {
+        isPending = false
+        passwordRequest = nil
+        ArchivePasswordWindowController.shared.close()
+        exitIfNoVisibleMainWindow()
+    }
+
+    private func startExtraction(url: URL, password: String?) {
         guard job == nil else {
             if !pendingURLs.contains(url) {
                 pendingURLs.append(url)
@@ -97,6 +160,7 @@ final class ArchiveSession: ObservableObject {
                 try await ArchiveExtractor.extract(
                     archiveURL: url,
                     to: destination,
+                    password: password,
                     progress: { value in
                         // 用主队列派发而非 Task：解压结束时应用会很快退出，
                         // 悬空的 MainActor Task 可能来不及执行，导致进度不动。
@@ -143,6 +207,19 @@ final class ArchiveSession: ObservableObject {
                     // 计时器会每秒覆盖浮窗文案，失败/取消后必须停掉，
                     // 否则界面看起来像「一直在解压」。
                     self.elapsedTask?.cancel()
+                    if case ArchiveError.passwordRequired = error {
+                        // 密码不对：先弹出密码窗口，再收起进度浮窗。
+                        // 顺序不能反：两者之间只要有一瞬间屏幕上没有任何窗口，
+                        // AppKit 就会按「最后一个窗口已关闭」直接退出 App。
+                        self.passwordRequest = ArchivePasswordRequest(
+                            url: url,
+                            message: NSLocalizedString("密码不正确，请重试", comment: "")
+                        )
+                        ArchivePasswordWindowController.shared.show()
+                        self.job = nil
+                        ExtractionWindowController.shared.close()
+                        return
+                    }
                     if case ArchiveError.cancelled = error {
                         current.phase = .cancelled
                         self.advanceOrTerminate(after: 0.6)
@@ -240,6 +317,7 @@ final class ArchiveSession: ObservableObject {
     /// 完成/取消后自动关闭浮窗；失败保留，让用户看到原因。
     /// 结束后：若还有排队的压缩包则继续处理，否则关闭浮窗并退出应用。
     private func advanceOrTerminate(after seconds: Double) {
+        isPending = false
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
             self.elapsedTask?.cancel()

@@ -43,13 +43,23 @@ struct RootWindow: View {
                 title: windowTitle,
                 hidesWindowChrome: archive.job != nil,
                 onWindowReady: { window in
+                    // 首帧前为等尺寸而藏起来的窗口：尺寸定下来后再显示。
+                    if window.alphaValue == 0, !isArchiveFlow, !isMounting {
+                        Self.reveal(window)
+                    }
                     let showsSettings = isSettingsPage
                     if !showsSettings { Self.settingsPlacedWindow = nil }
                     if archive.job != nil {
                         // 解压由独立浮窗承载，主窗口不露面。
                         window.orderOut(nil)
+                    } else if isArchiveFlow {
+                        // 检测加密、等密码期间只保持透明，不能 orderOut：
+                        // 此时密码窗口还没出来，屏幕上没有任何窗口，
+                        // AppKit 会按「最后一个窗口已关闭」直接退出 App。
+                        // 密码窗口出现时会自己把主窗口收起来。
+                        Self.conceal(window)
                     } else if browse.isActive {
-                        Self.resize(window, to: NSSize(width: 680, height: 520))
+                        Self.resize(window, to: Self.browseSize)
                     } else if showsSettings {
                         Self.placeSettings(window)
                     } else if isIdle {
@@ -83,6 +93,9 @@ struct RootWindow: View {
                     guard isSettingsPage,
                           Self.settingsPlacedWindow == ObjectIdentifier(window) else { return }
                     WindowFrameMemory.save(window, key: Self.settingsFrameKey)
+                },
+                onWindowAttach: { window in
+                    prepareBeforeFirstFrame(window)
                 }
             )
         )
@@ -210,6 +223,54 @@ struct RootWindow: View {
         return false
     }
 
+    /// 压缩包流程进行中：正在解压，或还在检测加密、等用户输入密码。
+    /// 这期间只显示解压浮窗或密码窗口，主窗口不能露面。
+    private var isArchiveFlow: Bool {
+        archive.job != nil || archive.isPending || archive.passwordRequest != nil
+    }
+
+    private var isMounting: Bool {
+        if case .mounting = model.state { return true }
+        return false
+    }
+
+    /// 窗口第一次显示之前同步调用：直接按目标尺寸摆好，或在尺寸未知时先藏起来，
+    /// 避免 SwiftUI 默认尺寸的窗口先露一下再变成设置页或 DMG 窗口。
+    private func prepareBeforeFirstFrame(_ window: NSWindow) {
+        if isArchiveFlow {
+            // 解压、等密码只显示独立浮窗；这里先保证主窗口不露面。
+            Self.conceal(window)
+        } else if isMounting {
+            // DMG 的设计尺寸要等挂载、读完 .DS_Store 才知道，期间先藏起来。
+            Self.conceal(window)
+            // 兜底：挂载太慢时仍要让用户看到进度，不能一直不显示。
+            Task { @MainActor [weak window] in
+                try? await Task.sleep(for: .seconds(Self.mountRevealDelay))
+                guard let window, window.alphaValue == 0, !isArchiveFlow else { return }
+                Self.reveal(window)
+            }
+        } else if browse.isActive {
+            Self.resize(window, to: Self.browseSize)
+        } else if isSettingsPage {
+            Self.placeSettings(window)
+        }
+    }
+
+    /// 透明藏起窗口，同时不拦截鼠标，避免挡住下面的窗口。
+    private static func conceal(_ window: NSWindow) {
+        window.alphaValue = 0
+        window.ignoresMouseEvents = true
+    }
+
+    private static func reveal(_ window: NSWindow) {
+        window.alphaValue = 1
+        window.ignoresMouseEvents = false
+    }
+
+    private static let browseSize = NSSize(width: 680, height: 520)
+    /// 挂载超过这个时间仍未得到 DMG 尺寸时，先按当前尺寸显示进度。
+    private static let mountRevealDelay: Double = 1.5
+
     /// 无参数启动时显示的设置页（由文件启动的会话结束后会直接退出，不算设置页）。
     private var isSettingsPage: Bool {
         isIdle && !model.launchedWithFile && archive.job == nil && !browse.isActive
@@ -292,7 +353,10 @@ struct RootWindow: View {
                             try? await Task.sleep(
                                 for: .seconds(hasBanner ? 2.0 : 0.15)
                             )
-                            guard archive.job == nil else { return }
+                            // 正在解压、检测加密、或等用户输入密码时都不能退出。
+                            guard archive.job == nil,
+                                  archive.passwordRequest == nil,
+                                  !archive.isPending else { return }
                             NSApp.terminate(nil)
                         }
                     }

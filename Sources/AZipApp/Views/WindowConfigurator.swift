@@ -14,6 +14,23 @@ struct WindowConfigurator: NSViewRepresentable {
     var shouldClose: (@MainActor () -> Bool)?
     /// 窗口位置变化后的回调，用于记忆设置页位置。
     var onWindowMove: (@MainActor (NSWindow) -> Void)?
+    /// 宿主视图刚放进窗口时同步调用，此时窗口还没显示出来。
+    /// 用于在第一帧之前定好窗口尺寸或先把窗口藏起来，避免默认尺寸的窗口一闪而过。
+    var onWindowAttach: (@MainActor (NSWindow) -> Void)?
+
+    /// 能在进入窗口时同步通知的空视图。`makeNSView` 时 `window` 还是 nil，
+    /// 等 `DispatchQueue.main.async` 再处理时窗口已经按 SwiftUI 默认尺寸显示出来了。
+    final class AttachView: NSView {
+        var onAttach: (@MainActor (NSWindow) -> Void)?
+        private weak var attachedWindow: NSWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window, window !== attachedWindow else { return }
+            attachedWindow = window
+            onAttach?(window)
+        }
+    }
 
     @MainActor
     final class Coordinator: NSObject, NSWindowDelegate {
@@ -74,7 +91,8 @@ struct WindowConfigurator: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
+        let view = AttachView()
+        view.onAttach = onWindowAttach
         let title = title
         DispatchQueue.main.async {
             configure(view.window, coordinator: context.coordinator)
