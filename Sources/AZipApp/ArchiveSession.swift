@@ -66,7 +66,7 @@ final class ArchiveSession: ObservableObject {
     private let cancelFlag = CancelFlag()
 
     /// 支持自动解压的扩展名（与 Core 的解压器保持一致）。
-    static var supportedExtensions: Set<String> { ArchiveExtractor.supportedExtensions }
+    nonisolated static var supportedExtensions: Set<String> { ArchiveExtractor.supportedExtensions }
 
     func extract(url: URL) {
         isPending = true

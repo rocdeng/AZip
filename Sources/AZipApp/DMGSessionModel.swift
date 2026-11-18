@@ -109,6 +109,11 @@ final class DMGSessionModel: ObservableObject {
         return navigationStack.last?.lastPathComponent ?? dmgName
     }
 
+    /// 根目录里是否有可以进入的普通文件夹；没有的话隐藏导航按钮。
+    var hasNavigableFolders: Bool {
+        rootEntries.contains { $0.kind == .folder }
+    }
+
     var rootApplications: [VolumeEntry] {
         VolumeScanner.applications(in: rootEntries)
     }

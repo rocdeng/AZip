@@ -11,12 +11,16 @@ struct BottomBar: View {
     var body: some View {
         ZStack {
             HStack {
-                BackForwardControl(
-                    canGoBack: model.canGoBack,
-                    canGoForward: model.canGoForward,
-                    onBack: { model.goBack() },
-                    onForward: { model.goForward() }
-                )
+                // 只有磁盘映像里真的存在可进入的文件夹时才需要导航；
+                // 普通「应用 + Applications」布局没有层级，按钮默认隐藏。
+                if model.hasNavigableFolders {
+                    BackForwardControl(
+                        canGoBack: model.canGoBack,
+                        canGoForward: model.canGoForward,
+                        onBack: { model.goBack() },
+                        onForward: { model.goForward() }
+                    )
+                }
                 Spacer()
             }
 

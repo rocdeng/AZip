@@ -126,7 +126,7 @@ struct WindowConfigurator: NSViewRepresentable {
         window.hasShadow = true
         window.minSize = hidesWindowChrome
             ? NSSize(width: 360, height: 200)
-            : NSSize(width: 480, height: 320)
+            : NSSize(width: 400, height: 320)
         window.identifier = NSUserInterfaceItemIdentifier("AZipMainWindow")
 
         installVisualEffectView(in: window)

@@ -4,7 +4,7 @@ import Foundation
 
 public struct DMGWindowLayout: Sendable {
     public static let defaultSize = CGSize(width: 640, height: 400)
-    public static let minimumSize = CGSize(width: 480, height: 320)
+    public static let minimumSize = CGSize(width: 400, height: 320)
     public static let maximumSize = CGSize(width: 1600, height: 1200)
     public static let defaultIconSize: CGFloat = 64
     public static let minimumIconSize: CGFloat = 48
@@ -60,6 +60,18 @@ public struct DMGWindowLayout: Sendable {
         chrome: FinderChrome = FinderChrome()
     ) -> CGSize {
         guard let image = backgroundImage else { return windowBounds }
+        // 没有侧边栏时，窗口宽度必须严格等于背景图：多出来的部分会露出窗口底色
+        // （Infuse 这类竖版背景图表现为右侧黑边）。
+        // 有侧边栏（Gemini 等）时保留原逻辑，按记录的内容区大小走。
+        // 只有「多出来的一点点」才当作窗口误差收掉；差得多的说明记录的内容区
+        // 确实比背景图宽（Gemini 那种），仍按记录值走。
+        let widthGap = windowBounds.width - image.width
+        if !chrome.showsSidebar, widthGap > -1, widthGap <= 60 {
+            return CGSize(
+                width: image.width,
+                height: max(image.height, windowBounds.height)
+            )
+        }
         let extraWidth = windowBounds.width - image.width
         let extraHeight = windowBounds.height - image.height
         guard extraWidth >= -1, extraWidth <= chromeWidthAllowance(chrome),

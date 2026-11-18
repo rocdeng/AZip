@@ -3,6 +3,8 @@ import Foundation
 
 public enum FileAssociationError: LocalizedError, Sendable {
     case setFailed(uti: String, status: OSStatus)
+    /// LaunchServices 返回成功，但默认处理程序并没有真的换成我们。
+    case notEffective(uti: String)
 
     public var errorDescription: String? {
         switch self {
@@ -11,6 +13,11 @@ public enum FileAssociationError: LocalizedError, Sendable {
                 format: NSLocalizedString("无法将 %@ 设为默认打开方式（错误码 %d）", comment: ""),
                 uti,
                 status
+            )
+        case let .notEffective(uti):
+            return String(
+                format: NSLocalizedString("系统没有接受 %@ 的关联设置，请把 AZip 放进「应用程序」文件夹后再试", comment: ""),
+                uti
             )
         }
     }
@@ -112,11 +119,26 @@ public enum FileAssociationService {
     }
 
     public static func setDefault(bundleID: String, for type: FileTypeAssociation) throws {
+        // 先把当前 App 重新注册给 LaunchServices：从 build 目录直接运行时，
+        // 系统可能还没认识这个 bundle，导致后面的设置静默失效。
+        refreshRegistration()
+
         let status = LSSetDefaultRoleHandlerForContentType(
             type.id as CFString, .all, bundleID as CFString
         )
         if status != noErr {
             throw FileAssociationError.setFailed(uti: type.id, status: status)
+        }
+        // 某些系统返回 noErr 却没有真正生效，这里确认一次，避免开关点亮但双击仍是系统程序。
+        if currentHandler(for: type.id) != bundleID {
+            throw FileAssociationError.notEffective(uti: type.id)
+        }
+    }
+
+    /// 把当前 App 重新注册到 LaunchServices。
+    private static func refreshRegistration() {
+        if let url = Bundle.main.bundleURL as CFURL? {
+            LSRegisterURL(url, true)
         }
     }
 

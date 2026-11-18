@@ -100,7 +100,7 @@ struct RootWindow: View {
             )
         )
         .frame(
-            minWidth: archive.job == nil ? 480 : 360,
+            minWidth: archive.job == nil ? 400 : 360,
             minHeight: archive.job == nil ? 320 : 200
         )
         .background { navigationShortcuts }
@@ -279,7 +279,7 @@ struct RootWindow: View {
     /// 接收拖入的 `.dmg`：只处理第一个合法磁盘映像。
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
-        _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             let url: URL?
             if let data = item as? Data {
                 url = URL(dataRepresentation: data, relativeTo: nil)
